@@ -86,22 +86,35 @@ class MdxConverter < Asciidoctor::Converter::Base
     rows = []
 
     if node.rows.head.any?
-      header_cells = node.rows.head.first.map { |cell| escape_inline_content(cell.text.strip).gsub('|', '\|') }
+      header_cells = node.rows.head.first.map { |cell| table_cell_text(cell).gsub('|', '\|') }
       rows << "| #{header_cells.join(' | ')} |"
       rows << "| #{header_cells.map { '---' }.join(' | ')} |"
     end
 
     node.rows.body.each do |row|
-      cells = row.map { |cell| escape_inline_content(cell.text.strip).gsub('|', '\\|') }
+      cells = row.map { |cell| table_cell_text(cell).gsub('|', '\\|') }
       rows << "| #{cells.join(' | ')} |"
     end
 
     node.rows.foot.each do |row|
-      cells = row.map { |cell| escape_inline_content(cell.text.strip).gsub('|', '\\|') }
+      cells = row.map { |cell| table_cell_text(cell).gsub('|', '\\|') }
       rows << "| #{cells.join(' | ')} |"
     end
 
     "#{rows.join("\n")}\n\n"
+  end
+
+  # Convert a table cell to a plain string suitable for a GFM table cell.
+  # For asciidoc-style cells (which may contain nested tables or blocks),
+  # convert the inner document blocks and flatten to a single line.
+  def table_cell_text(cell)
+    if cell.style == :asciidoc && cell.inner_document
+      # Convert inner blocks through our converter and collapse to one line
+      inner = cell.inner_document.blocks.map { |b| convert(b) }.join(' ').strip
+      inner.gsub(/\n+/, ' ').gsub(/\s{2,}/, ' ')
+    else
+      escape_inline_content(cell.text.strip)
+    end
   end
 
   def convert_image(node)
@@ -179,6 +192,7 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   def convert_thematic_break(node) = "---\n\n"
   def convert_toc(node)            = ''
+  def convert_embedded(node)       = node.content
 
   def convert_pass(node)
     "#{node.content}\n\n"
