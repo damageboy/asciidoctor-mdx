@@ -67,8 +67,15 @@ class MdxConverter < Asciidoctor::Converter::Base
     id_comment = node.id ? " {/* ##{node.id} */}" : ''
     "#{hashes} #{title}#{id_comment}\n\n#{node.content}"
   end
-  def convert_listing(node)        = ''
-  def convert_literal(node)        = ''
+  def convert_listing(node)
+    lang = node.attr('language', nil, false)
+    fence = lang ? "```#{lang}" : '```'
+    "#{fence}\n#{node.source}\n```\n\n"
+  end
+
+  def convert_literal(node)
+    "```\n#{node.source}\n```\n\n"
+  end
   def convert_stem(node)           = ''
   def convert_table(node)          = ''
   def convert_image(node)          = ''

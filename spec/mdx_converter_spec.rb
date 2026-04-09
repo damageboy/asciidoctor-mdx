@@ -88,6 +88,33 @@ RSpec.describe MdxConverter do
     end
   end
 
+  describe 'code blocks' do
+    def chapter_content(source)
+      result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
+      result['ch']
+    end
+
+    it 'renders a listing block as a fenced code block' do
+      src = "[source,ruby]\n----\nputs 'hello'\n----"
+      expect(chapter_content(src)).to include("```ruby\nputs 'hello'\n```")
+    end
+
+    it 'renders a listing block without language as plain fenced block' do
+      src = "----\nsome text\n----"
+      expect(chapter_content(src)).to include("```\nsome text\n```")
+    end
+
+    it 'renders a literal block as a plain fenced code block' do
+      src = "....\nindented literal\n...."
+      expect(chapter_content(src)).to include("```\nindented literal\n```")
+    end
+
+    it 'does not escape curly braces inside code blocks' do
+      src = "[source,c]\n----\nvoid f(int {x}) {}\n----"
+      expect(chapter_content(src)).to include("void f(int {x}) {}")
+    end
+  end
+
   describe 'paragraphs and inline formatting' do
     def chapter_content(source)
       result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
