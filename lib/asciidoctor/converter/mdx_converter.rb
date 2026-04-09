@@ -184,6 +184,7 @@ class MdxConverter < Asciidoctor::Converter::Base
     id_comment = node.id ? " {/* ##{node.id} */}" : ''
     "#{hashes} #{escape_mdx(node.title)}#{id_comment}\n\n"
   end
+  def convert_page_break(node)      = ''
   def convert_inline_image(node)   = ''
   def convert_inline_break(node)   = "\n"
   def convert_inline_indexterm(node) = ''
