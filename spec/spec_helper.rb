@@ -17,9 +17,9 @@ def convert_to_mdx(source, attributes: {})
       source,
       backend: 'mdx',
       safe: :safe,
-      to_dir: tmpdir,
+      standalone: true,
       to_file: false,
-      attributes: { 'stem' => 'latexmath' }.merge(attributes)
+      attributes: { 'stem' => 'latexmath', 'mdxdir' => tmpdir }.merge(attributes)
     )
     Dir[File.join(tmpdir, '*.mdx')].each_with_object({}) do |path, h|
       h[File.basename(path, '.mdx')] = File.read(path)
