@@ -137,6 +137,28 @@ RSpec.describe MdxConverter do
     end
   end
 
+  describe 'diagram blocks (Kroki)' do
+    def chapter_content(source)
+      result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
+      result['ch']
+    end
+
+    it 'renders a graphviz listing as a graphviz fenced block' do
+      src = "[source,graphviz]\n----\ndigraph G { A -> B }\n----"
+      expect(chapter_content(src)).to include("```graphviz\ndigraph G { A -> B }\n```")
+    end
+
+    it 'renders a plantuml listing as a plantuml fenced block' do
+      src = "[source,plantuml]\n----\n@startuml\nA -> B\n@enduml\n----"
+      expect(chapter_content(src)).to include("```plantuml\n@startuml")
+    end
+
+    it 'does not escape diagram source content' do
+      src = "[source,graphviz]\n----\ndigraph G { A [label=\"test\"]; }\n----"
+      expect(chapter_content(src)).to include('{')
+    end
+  end
+
   describe 'paragraphs and inline formatting' do
     def chapter_content(source)
       result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
