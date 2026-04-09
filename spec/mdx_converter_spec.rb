@@ -231,6 +231,39 @@ RSpec.describe MdxConverter do
     end
   end
 
+  describe 'tables' do
+    def chapter_content(source)
+      result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
+      result['ch']
+    end
+
+    let(:simple_table) do
+      <<~ADOC
+        [cols="1,1",options="header"]
+        |===
+        | Name | Value
+        | foo  | 1
+        | bar  | 2
+        |===
+      ADOC
+    end
+
+    it 'renders a table with a header row' do
+      content = chapter_content(simple_table)
+      expect(content).to include('| Name | Value |')
+      expect(content).to include('| --- | --- |')
+      expect(content).to include('| foo | 1 |')
+      expect(content).to include('| bar | 2 |')
+    end
+
+    it 'separates header from body with a GFM separator row' do
+      content = chapter_content(simple_table)
+      lines = content.lines.map(&:strip)
+      header_idx = lines.index { |l| l.include?('Name') && l.include?('Value') }
+      expect(lines[header_idx + 1]).to match(/^\|(\s*---\s*\|)+$/)
+    end
+  end
+
   describe 'paragraphs and inline formatting' do
     def chapter_content(source)
       result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")

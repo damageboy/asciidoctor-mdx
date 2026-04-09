@@ -80,7 +80,28 @@ class MdxConverter < Asciidoctor::Converter::Base
   def convert_stem(node)
     "```math\n#{node.content}\n```\n\n"
   end
-  def convert_table(node)          = ''
+  def convert_table(node)
+    rows = []
+
+    if node.rows.head.any?
+      header_cells = node.rows.head.first.map { |cell| escape_inline_content(cell.text.strip) }
+      rows << "| #{header_cells.join(' | ')} |"
+      rows << "| #{header_cells.map { '---' }.join(' | ')} |"
+    end
+
+    node.rows.body.each do |row|
+      cells = row.map { |cell| escape_inline_content(cell.text.strip).gsub('|', '\\|') }
+      rows << "| #{cells.join(' | ')} |"
+    end
+
+    node.rows.foot.each do |row|
+      cells = row.map { |cell| escape_inline_content(cell.text.strip).gsub('|', '\\|') }
+      rows << "| #{cells.join(' | ')} |"
+    end
+
+    "#{rows.join("\n")}\n\n"
+  end
+
   def convert_image(node)          = ''
   ADMONITION_TYPES = {
     'NOTE'      => 'note',
