@@ -61,7 +61,6 @@ class MdxConverter < Asciidoctor::Converter::Base
     "#{frontmatter}\n#{section.content}\n"
   end
 
-  # Stub — remaining convert_* methods return empty string until implemented
   def convert_section(node)
     hashes     = '#' * node.level
     title      = escape_mdx(node.title)
@@ -84,7 +83,7 @@ class MdxConverter < Asciidoctor::Converter::Base
     rows = []
 
     if node.rows.head.any?
-      header_cells = node.rows.head.first.map { |cell| escape_inline_content(cell.text.strip) }
+      header_cells = node.rows.head.first.map { |cell| escape_inline_content(cell.text.strip).gsub('|', '\|') }
       rows << "| #{header_cells.join(' | ')} |"
       rows << "| #{header_cells.map { '---' }.join(' | ')} |"
     end
@@ -145,12 +144,16 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   def convert_dlist(node)
     items = node.items.map do |terms, dd|
-      term_text = Array(terms).map { |t| escape_mdx(t.text) }.join(', ')
+      term_text = Array(terms).map { |t| escape_inline_content(t.text) }.join(', ')
       desc = dd ? dd.text.to_s : ''
-      "**#{term_text}**\n#{escape_mdx(desc)}\n"
+      "**#{term_text}**\n#{escape_inline_content(desc)}\n"
     end
     "#{items.join("\n")}\n"
   end
+  def convert_open(node)
+    "#{node.content}\n"
+  end
+
   def convert_example(node)
     ":::note\n\n#{node.content}\n\n:::\n\n"
   end
@@ -159,7 +162,7 @@ class MdxConverter < Asciidoctor::Converter::Base
     attribution = node.attr('attribution', nil, false)
     lines = node.content.lines.map { |l| "> #{l.chomp}\n" }
     result = lines.join
-    result += "\n> — #{escape_inline_content(attribution)}\n" if attribution
+    result += "\n> — #{escape_mdx(attribution)}\n" if attribution
     "#{result}\n"
   end
 
@@ -170,6 +173,9 @@ class MdxConverter < Asciidoctor::Converter::Base
   def convert_sidebar(node)
     ":::info\n\n#{node.content}\n\n:::\n\n"
   end
+
+  def convert_thematic_break(node) = "---\n\n"
+  def convert_toc(node)            = ''
 
   def convert_pass(node)
     "#{node.content}\n\n"
@@ -186,7 +192,7 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
   def convert_page_break(node)      = ''
   def convert_inline_image(node)   = ''
-  def convert_inline_break(node)   = "\n"
+  def convert_inline_break(node)   = "  \n"
   def convert_inline_indexterm(node) = ''
   def convert_inline_callout(node)   = ''
   def convert_inline_footnote(node)  = ''
