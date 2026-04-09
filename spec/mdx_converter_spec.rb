@@ -159,6 +159,33 @@ RSpec.describe MdxConverter do
     end
   end
 
+  describe 'admonitions' do
+    def chapter_content(source)
+      result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
+      result['ch']
+    end
+
+    it 'renders NOTE as :::note' do
+      expect(chapter_content('NOTE: This is a note.')).to include(":::note\n")
+    end
+
+    it 'renders TIP as :::tip' do
+      expect(chapter_content('TIP: This is a tip.')).to include(":::tip\n")
+    end
+
+    it 'renders IMPORTANT as :::info' do
+      expect(chapter_content('IMPORTANT: This is important.')).to include(":::info\n")
+    end
+
+    it 'renders WARNING as :::warning' do
+      expect(chapter_content('WARNING: This is a warning.')).to include(":::warning\n")
+    end
+
+    it 'renders CAUTION as :::danger' do
+      expect(chapter_content('CAUTION: Take caution.')).to include(":::danger\n")
+    end
+  end
+
   describe 'paragraphs and inline formatting' do
     def chapter_content(source)
       result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")

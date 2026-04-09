@@ -81,7 +81,18 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
   def convert_table(node)          = ''
   def convert_image(node)          = ''
-  def convert_admonition(node)     = ''
+  ADMONITION_TYPES = {
+    'NOTE'      => 'note',
+    'TIP'       => 'tip',
+    'IMPORTANT' => 'info',
+    'WARNING'   => 'warning',
+    'CAUTION'   => 'danger'
+  }.freeze
+
+  def convert_admonition(node)
+    type = ADMONITION_TYPES.fetch(node.attr('name', nil, false).to_s.upcase, 'note')
+    ":::#{type}\n\n#{node.content}\n\n:::\n\n"
+  end
   def convert_ulist(node)          = ''
   def convert_olist(node)          = ''
   def convert_dlist(node)          = ''
