@@ -76,7 +76,9 @@ class MdxConverter < Asciidoctor::Converter::Base
   def convert_literal(node)
     "```\n#{node.source}\n```\n\n"
   end
-  def convert_stem(node)           = ''
+  def convert_stem(node)
+    "```math\n#{node.content}\n```\n\n"
+  end
   def convert_table(node)          = ''
   def convert_image(node)          = ''
   def convert_admonition(node)     = ''

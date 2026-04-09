@@ -115,6 +115,28 @@ RSpec.describe MdxConverter do
     end
   end
 
+  describe 'math' do
+    def chapter_content(source)
+      result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
+      result['ch']
+    end
+
+    it 'renders inline stem as $...$ KaTeX' do
+      expect(chapter_content('The value stem:[x = y + z] is shown.')).to include('$x = y + z$')
+    end
+
+    it 'renders a block stem as a ```math fenced block' do
+      src = "[stem]\n++++\n\\sum_{i=0}^{n} x_i\n++++"
+      content = chapter_content(src)
+      expect(content).to include("```math\n\\sum_{i=0}^{n} x_i\n```")
+    end
+
+    it 'does not escape LaTeX braces inside math blocks' do
+      src = "[stem]\n++++\n\\frac{a}{b}\n++++"
+      expect(chapter_content(src)).to include('\\frac{a}{b}')
+    end
+  end
+
   describe 'paragraphs and inline formatting' do
     def chapter_content(source)
       result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
