@@ -32,11 +32,14 @@ class MdxConverter < Asciidoctor::Converter::Base
   private
 
   def section_slug(section)
-    # Use explicit id if one was set in the source (auto-generated ids are not in attributes)
     explicit_id = section.attributes['id']
-    return explicit_id if explicit_id && !explicit_id.empty?
-
-    section.title.downcase.gsub(/[^a-z0-9]+/, '-').gsub(/^-+|-+$/, '')
+    base = if explicit_id && !explicit_id.empty?
+      explicit_id
+    else
+      section.title.downcase.gsub(/[^a-z0-9]+/, '-').gsub(/^-+|-+$/, '')
+    end
+    # Sanitize for use as a filename and URL slug: replace non-alphanumeric/hyphen chars
+    base.gsub(':', '-').gsub(/[^a-z0-9\-_]/, '-').gsub(/-+/, '-').gsub(/^-+|-+$/, '')
   end
 
   def collect_anchors(node, chapter_slug)
