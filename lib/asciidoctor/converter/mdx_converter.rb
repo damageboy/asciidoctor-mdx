@@ -248,17 +248,15 @@ class MdxConverter < Asciidoctor::Converter::Base
     str.to_s
        .gsub('&lt;', '\<')
        .gsub('&gt;', '\>')
-       .gsub('&amp;', '&')
        .gsub('{', '\{')
        .gsub('}', '\}')
   end
 
   def escape_mdx(str)
     str.to_s
-       .gsub('\\', '\\\\\\\\')  # backslash first
-       .gsub('<', '\<')          # bare < is a JSX tag open
-       .gsub('{', '\{')          # bare { is a JSX expression
-       .gsub('}', '\}')          # bare } closes JSX expression
+       .gsub('<', '\<')   # bare < is a JSX tag open
+       .gsub('{', '\{')   # bare { is a JSX expression
+       .gsub('}', '\}')   # bare } closes a JSX expression
   end
 
   def presence(str)
