@@ -186,6 +186,44 @@ RSpec.describe MdxConverter do
     end
   end
 
+  describe 'lists' do
+    def chapter_content(source)
+      result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
+      result['ch']
+    end
+
+    it 'renders an unordered list' do
+      src = "* Alpha\n* Beta\n* Gamma"
+      content = chapter_content(src)
+      expect(content).to include("- Alpha\n")
+      expect(content).to include("- Beta\n")
+      expect(content).to include("- Gamma\n")
+    end
+
+    it 'renders an ordered list' do
+      src = ". First\n. Second\n. Third"
+      content = chapter_content(src)
+      expect(content).to include("1. First\n")
+      expect(content).to include("2. Second\n")
+      expect(content).to include("3. Third\n")
+    end
+
+    it 'renders a definition list as bold term + paragraph' do
+      src = "term:: definition text"
+      content = chapter_content(src)
+      expect(content).to include('**term**')
+      expect(content).to include('definition text')
+    end
+
+    it 'renders nested unordered lists with indentation' do
+      src = "* Top\n** Nested\n*** Deep"
+      content = chapter_content(src)
+      expect(content).to include("- Top\n")
+      expect(content).to include("  - Nested\n")
+      expect(content).to include("    - Deep\n")
+    end
+  end
+
   describe 'paragraphs and inline formatting' do
     def chapter_content(source)
       result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")

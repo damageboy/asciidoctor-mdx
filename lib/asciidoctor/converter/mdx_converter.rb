@@ -40,6 +40,7 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
 
   def collect_anchors(node, chapter_slug)
+    return unless node.respond_to?(:id)
     @xref_map[node.id] = chapter_slug if node.id && !node.id.empty?
     return unless node.respond_to?(:blocks)
     node.blocks.each { |b| collect_anchors(b, chapter_slug) }
@@ -93,9 +94,37 @@ class MdxConverter < Asciidoctor::Converter::Base
     type = ADMONITION_TYPES.fetch(node.attr('name', nil, false).to_s.upcase, 'note')
     ":::#{type}\n\n#{node.content}\n\n:::\n\n"
   end
-  def convert_ulist(node)          = ''
-  def convert_olist(node)          = ''
-  def convert_dlist(node)          = ''
+  def list_depth(node)
+    depth = 0
+    p = node.parent
+    while p
+      depth += 1 if p.respond_to?(:context) && p.context == :list_item
+      p = p.respond_to?(:parent) ? p.parent : nil
+    end
+    depth
+  end
+
+  def convert_ulist(node)
+    indent = '  ' * list_depth(node)
+    items  = node.items.map { |item| "#{indent}- #{item.text}\n#{item.content}" }
+    "#{items.join}\n"
+  end
+
+  def convert_olist(node)
+    items = node.items.each_with_index.map do |item, idx|
+      "#{idx + 1}. #{item.text}\n#{item.content}"
+    end
+    "#{items.join}\n"
+  end
+
+  def convert_dlist(node)
+    items = node.items.map do |terms, dd|
+      term_text = Array(terms).map { |t| escape_mdx(t.text) }.join(', ')
+      desc = dd ? dd.text.to_s : ''
+      "**#{term_text}**\n#{escape_mdx(desc)}\n"
+    end
+    "#{items.join("\n")}\n"
+  end
   def convert_example(node)        = ''
   def convert_quote(node)          = ''
   def convert_verse(node)          = ''
