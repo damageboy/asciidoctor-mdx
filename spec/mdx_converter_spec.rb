@@ -264,6 +264,45 @@ RSpec.describe MdxConverter do
     end
   end
 
+  describe 'cross-references' do
+    let(:source) do
+      <<~ADOC
+        = Doc
+
+        [#chapter-a]
+        == Chapter A
+
+        See <<chapter-b,Chapter B>> for details.
+        Also see <<local-section,this section>>.
+
+        [#local-section]
+        === Local Section
+
+        Text here.
+
+        [#chapter-b]
+        == Chapter B
+
+        See <<local-section,the local section in A>>.
+      ADOC
+    end
+
+    it 'renders a cross-chapter xref as a relative MDX link' do
+      result = convert_to_mdx(source)
+      expect(result['chapter-a']).to include('[Chapter B](./chapter-b)')
+    end
+
+    it 'renders a same-chapter xref as an anchor-only link' do
+      result = convert_to_mdx(source)
+      expect(result['chapter-a']).to include('[this section](#local-section)')
+    end
+
+    it 'renders a cross-chapter xref to a subsection with chapter and anchor' do
+      result = convert_to_mdx(source)
+      expect(result['chapter-b']).to include('[the local section in A](./chapter-a#local-section)')
+    end
+  end
+
   describe 'paragraphs and inline formatting' do
     def chapter_content(source)
       result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")

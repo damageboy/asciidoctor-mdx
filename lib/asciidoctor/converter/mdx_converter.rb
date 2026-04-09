@@ -231,6 +231,9 @@ class MdxConverter < Asciidoctor::Converter::Base
     chapter = @xref_map&.fetch(target, nil)
     if chapter.nil? || chapter == @current_chapter
       "[#{escape_mdx(text)}](##{target})"
+    elsif chapter == target
+      # target IS the chapter (top-level section); no anchor fragment needed
+      "[#{escape_mdx(text)}](./#{chapter})"
     else
       "[#{escape_mdx(text)}](./#{chapter}##{target})"
     end
