@@ -46,6 +46,48 @@ RSpec.describe MdxConverter do
     end
   end
 
+  describe 'section headings' do
+    let(:source) do
+      <<~ADOC
+        = Doc
+
+        [#intro]
+        == Introduction
+
+        [#overview]
+        === Overview
+
+        Some text.
+
+        [#details]
+        ==== Details
+
+        More text.
+      ADOC
+    end
+
+    it 'renders subsections as ## headings with MDX comment ID' do
+      result = convert_to_mdx(source)
+      expect(result['intro']).to include('## Overview {/* #overview */}')
+    end
+
+    it 'renders level 3 subsections as ### headings' do
+      result = convert_to_mdx(source)
+      expect(result['intro']).to include('### Details {/* #details */}')
+    end
+
+    it 'does not emit a heading for the top-level chapter section itself' do
+      result = convert_to_mdx(source)
+      expect(result['intro']).not_to include('# Introduction')
+    end
+
+    it 'escapes curly braces in heading titles' do
+      src = "= Doc\n\n[#ch]\n== Ch\n\n[#h2]\n=== Heading {foo}\n\nText."
+      result = convert_to_mdx(src)
+      expect(result['ch']).to include('## Heading \{foo\} {/* #h2 */}')
+    end
+  end
+
   describe 'paragraphs and inline formatting' do
     def chapter_content(source)
       result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")

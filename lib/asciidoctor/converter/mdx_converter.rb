@@ -61,7 +61,12 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
 
   # Stub — remaining convert_* methods return empty string until implemented
-  def convert_section(node)        = ''
+  def convert_section(node)
+    hashes     = '#' * node.level
+    title      = escape_mdx(node.title)
+    id_comment = node.id ? " {/* ##{node.id} */}" : ''
+    "#{hashes} #{title}#{id_comment}\n\n#{node.content}"
+  end
   def convert_listing(node)        = ''
   def convert_literal(node)        = ''
   def convert_stem(node)           = ''
@@ -133,6 +138,7 @@ class MdxConverter < Asciidoctor::Converter::Base
        .gsub('\\', '\\\\\\\\')  # backslash first
        .gsub('<', '\<')          # bare < is a JSX tag open
        .gsub('{', '\{')          # bare { is a JSX expression
+       .gsub('}', '\}')          # bare } closes JSX expression
   end
 
   def presence(str)
