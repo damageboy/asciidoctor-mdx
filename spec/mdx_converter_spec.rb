@@ -303,6 +303,40 @@ RSpec.describe MdxConverter do
     end
   end
 
+  describe 'remaining block types' do
+    def chapter_content(source)
+      result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
+      result['ch']
+    end
+
+    it 'renders an image macro' do
+      expect(chapter_content('image::diagram.png[Architecture diagram]')).to \
+        include('![Architecture diagram](diagram.png)')
+    end
+
+    it 'renders a quote block as a blockquote' do
+      src = "[quote,Linus Torvalds]\n____\nTalk is cheap.\n____"
+      expect(chapter_content(src)).to include('> Talk is cheap.')
+    end
+
+    it 'renders a sidebar as :::info' do
+      src = "****\nSidebar content.\n****"
+      expect(chapter_content(src)).to include(':::info')
+      expect(chapter_content(src)).to include('Sidebar content.')
+    end
+
+    it 'renders an example block as :::note' do
+      src = "====\nExample content.\n===="
+      expect(chapter_content(src)).to include(':::note')
+      expect(chapter_content(src)).to include('Example content.')
+    end
+
+    it 'renders a pass block as raw content' do
+      src = "++++\n<em>raw html</em>\n++++"
+      expect(chapter_content(src)).to include('<em>raw html</em>')
+    end
+  end
+
   describe 'paragraphs and inline formatting' do
     def chapter_content(source)
       result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")

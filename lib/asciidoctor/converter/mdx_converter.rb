@@ -102,7 +102,11 @@ class MdxConverter < Asciidoctor::Converter::Base
     "#{rows.join("\n")}\n\n"
   end
 
-  def convert_image(node)          = ''
+  def convert_image(node)
+    alt  = escape_mdx(node.attr('alt', node.attr('target'), false).to_s)
+    path = node.image_uri(node.attr('target'))
+    "![#{alt}](#{path})\n\n"
+  end
   ADMONITION_TYPES = {
     'NOTE'      => 'note',
     'TIP'       => 'tip',
@@ -147,13 +151,39 @@ class MdxConverter < Asciidoctor::Converter::Base
     end
     "#{items.join("\n")}\n"
   end
-  def convert_example(node)        = ''
-  def convert_quote(node)          = ''
-  def convert_verse(node)          = ''
-  def convert_sidebar(node)        = ''
-  def convert_pass(node)           = ''
-  def convert_preamble(node)       = ''
-  def convert_floating_title(node) = ''
+  def convert_example(node)
+    ":::note\n\n#{node.content}\n\n:::\n\n"
+  end
+
+  def convert_quote(node)
+    attribution = node.attr('attribution', nil, false)
+    lines = node.content.lines.map { |l| "> #{l.chomp}\n" }
+    result = lines.join
+    result += "\n> — #{escape_inline_content(attribution)}\n" if attribution
+    "#{result}\n"
+  end
+
+  def convert_verse(node)
+    convert_quote(node)
+  end
+
+  def convert_sidebar(node)
+    ":::info\n\n#{node.content}\n\n:::\n\n"
+  end
+
+  def convert_pass(node)
+    "#{node.content}\n\n"
+  end
+
+  def convert_preamble(node)
+    "#{node.content}\n\n"
+  end
+
+  def convert_floating_title(node)
+    hashes     = '#' * node.level
+    id_comment = node.id ? " {/* ##{node.id} */}" : ''
+    "#{hashes} #{escape_mdx(node.title)}#{id_comment}\n\n"
+  end
   def convert_inline_image(node)   = ''
   def convert_inline_break(node)   = "\n"
   def convert_inline_indexterm(node) = ''
