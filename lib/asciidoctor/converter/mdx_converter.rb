@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'yaml'
+
 class MdxConverter < Asciidoctor::Converter::Base
   register_for 'mdx'
 
@@ -45,14 +47,16 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   def render_chapter(section, position)
     slug = @chapter_slugs[section.object_id]
-    frontmatter = <<~YAML
-      ---
-      title: #{section.title.inspect}
-      sidebar_label: #{section.title.inspect}
-      sidebar_position: #{position}
-      id: #{slug}
-      ---
-    YAML
+    title = section.title
+    frontmatter = [
+      '---',
+      "title: #{title.to_yaml.strip.sub(/\A--- /, '')}",
+      "sidebar_label: #{title.to_yaml.strip.sub(/\A--- /, '')}",
+      "sidebar_position: #{position}",
+      "id: #{slug}",
+      '---',
+      ''
+    ].join("\n")
     "#{frontmatter}\n#{section.content}\n"
   end
 

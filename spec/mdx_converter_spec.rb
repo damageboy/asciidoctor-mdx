@@ -28,7 +28,7 @@ RSpec.describe MdxConverter do
     it 'includes YAML frontmatter with title and sidebar_position' do
       result = convert_to_mdx(source)
       expect(result['chapter-one']).to start_with("---\n")
-      expect(result['chapter-one']).to include('title: "Chapter One"')
+      expect(result['chapter-one']).to include('title: Chapter One')
       expect(result['chapter-one']).to include('sidebar_position: 1')
       expect(result['chapter-two']).to include('sidebar_position: 2')
     end
@@ -36,7 +36,7 @@ RSpec.describe MdxConverter do
     it 'includes id and sidebar_label in frontmatter' do
       result = convert_to_mdx(source)
       expect(result['chapter-one']).to include('id: chapter-one')
-      expect(result['chapter-one']).to include('sidebar_label: "Chapter One"')
+      expect(result['chapter-one']).to include('sidebar_label: Chapter One')
     end
 
     it 'slugifies title when section has no explicit id' do
