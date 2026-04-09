@@ -222,6 +222,13 @@ RSpec.describe MdxConverter do
       expect(content).to include("  - Nested\n")
       expect(content).to include("    - Deep\n")
     end
+
+    it 'escapes curly braces in list item text' do
+      src = "* The {rd} register\n* Value < 10"
+      content = chapter_content(src)
+      expect(content).to include('- The \{rd\} register')
+      expect(content).to include('- Value \< 10')
+    end
   end
 
   describe 'paragraphs and inline formatting' do

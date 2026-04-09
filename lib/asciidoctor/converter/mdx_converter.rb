@@ -91,8 +91,9 @@ class MdxConverter < Asciidoctor::Converter::Base
   }.freeze
 
   def convert_admonition(node)
-    type = ADMONITION_TYPES.fetch(node.attr('name', nil, false).to_s.upcase, 'note')
-    ":::#{type}\n\n#{node.content}\n\n:::\n\n"
+    type    = ADMONITION_TYPES.fetch(node.attr('name', nil, false).to_s.upcase, 'note')
+    content = node.blocks.empty? ? escape_inline_content(node.content) : node.content
+    ":::#{type}\n\n#{content}\n\n:::\n\n"
   end
   def list_depth(node)
     depth = 0
@@ -106,13 +107,13 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   def convert_ulist(node)
     indent = '  ' * list_depth(node)
-    items  = node.items.map { |item| "#{indent}- #{item.text}\n#{item.content}" }
+    items  = node.items.map { |item| "#{indent}- #{escape_inline_content(item.text)}\n#{item.content}" }
     "#{items.join}\n"
   end
 
   def convert_olist(node)
     items = node.items.each_with_index.map do |item, idx|
-      "#{idx + 1}. #{item.text}\n#{item.content}"
+      "#{idx + 1}. #{escape_inline_content(item.text)}\n#{item.content}"
     end
     "#{items.join}\n"
   end
@@ -180,6 +181,15 @@ class MdxConverter < Asciidoctor::Converter::Base
     else
       escape_mdx(node.text.to_s)
     end
+  end
+
+  def escape_inline_content(str)
+    str.to_s
+       .gsub('&lt;', '\<')
+       .gsub('&gt;', '\>')
+       .gsub('&amp;', '&')
+       .gsub('{', '\{')
+       .gsub('}', '\}')
   end
 
   def escape_mdx(str)
