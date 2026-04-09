@@ -204,12 +204,13 @@ class MdxConverter < Asciidoctor::Converter::Base
     # node.content assembles inline-converted output; HTML entities come from
     # Asciidoctor encoding bare < as &lt;. Unescape those into \< for MDX.
     # Also escape bare { which Asciidoctor leaves as-is for unresolved attributes.
+    # Use negative lookbehind to avoid double-escaping already-escaped braces.
     content = node.content
                   .gsub('&amp;', '&')
                   .gsub('&gt;', '>')
                   .gsub('&lt;', '\<')
-                  .gsub('{', '\{')
-                  .gsub('}', '\}')
+                  .gsub(/(?<!\\)\{/, '\{')
+                  .gsub(/(?<!\\)\}/, '\}')
     "#{content}\n\n"
   end
 
@@ -248,15 +249,15 @@ class MdxConverter < Asciidoctor::Converter::Base
     str.to_s
        .gsub('&lt;', '\<')
        .gsub('&gt;', '\>')
-       .gsub('{', '\{')
-       .gsub('}', '\}')
+       .gsub(/(?<!\\)\{/, '\{')
+       .gsub(/(?<!\\)\}/, '\}')
   end
 
   def escape_mdx(str)
     str.to_s
-       .gsub('<', '\<')   # bare < is a JSX tag open
-       .gsub('{', '\{')   # bare { is a JSX expression
-       .gsub('}', '\}')   # bare } closes a JSX expression
+       .gsub('<', '\<')              # bare < is a JSX tag open
+       .gsub(/(?<!\\)\{/, '\{')     # bare { is a JSX expression (not already escaped)
+       .gsub(/(?<!\\)\}/, '\}')     # bare } closes a JSX expression (not already escaped)
   end
 
   def presence(str)
