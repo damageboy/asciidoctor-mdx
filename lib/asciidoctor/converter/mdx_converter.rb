@@ -62,7 +62,6 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   # Stub — remaining convert_* methods return empty string until implemented
   def convert_section(node)        = ''
-  def convert_paragraph(node)      = ''
   def convert_listing(node)        = ''
   def convert_literal(node)        = ''
   def convert_stem(node)           = ''
@@ -79,11 +78,75 @@ class MdxConverter < Asciidoctor::Converter::Base
   def convert_pass(node)           = ''
   def convert_preamble(node)       = ''
   def convert_floating_title(node) = ''
-  def convert_inline_quoted(node)  = node.text.to_s
-  def convert_inline_anchor(node)  = node.text.to_s
   def convert_inline_image(node)   = ''
   def convert_inline_break(node)   = "\n"
   def convert_inline_indexterm(node) = ''
   def convert_inline_callout(node)   = ''
   def convert_inline_footnote(node)  = ''
+
+  def convert_paragraph(node)
+    # node.content assembles inline-converted output; HTML entities come from
+    # Asciidoctor encoding bare < as &lt;. Unescape those into \< for MDX.
+    # Also escape bare { which Asciidoctor leaves as-is for unresolved attributes.
+    content = node.content
+                  .gsub('&amp;', '&')
+                  .gsub('&gt;', '>')
+                  .gsub('&lt;', '\<')
+                  .gsub('{', '\{')
+                  .gsub('}', '\}')
+    "#{content}\n\n"
+  end
+
+  def convert_inline_quoted(node)
+    text = node.text.to_s
+    case node.type
+    when :strong      then "**#{text}**"
+    when :emphasis    then "_#{text}_"
+    when :monospaced  then "`#{text}`"
+    when :superscript then "<sup>#{text}</sup>"
+    when :subscript   then "<sub>#{text}</sub>"
+    when :latexmath   then "$#{text}$"
+    when :asciimath   then "$#{text}$"
+    when :mark        then "**#{text}**"
+    else escape_mdx(text)
+    end
+  end
+
+  def convert_inline_anchor(node)
+    case node.type
+    when :link
+      text = presence(node.text) || node.target
+      "[#{escape_mdx(text)}](#{node.target})"
+    when :xref
+      resolve_xref(node)
+    when :ref
+      ''
+    when :bibref
+      escape_mdx(node.text.to_s)
+    else
+      escape_mdx(node.text.to_s)
+    end
+  end
+
+  def escape_mdx(str)
+    str.to_s
+       .gsub('\\', '\\\\\\\\')  # backslash first
+       .gsub('<', '\<')          # bare < is a JSX tag open
+       .gsub('{', '\{')          # bare { is a JSX expression
+  end
+
+  def presence(str)
+    str && !str.to_s.strip.empty? ? str.to_s : nil
+  end
+
+  def resolve_xref(node)
+    target  = node.attr('refid') || node.target.to_s.sub(/^#/, '')
+    text    = presence(node.text) || target
+    chapter = @xref_map&.fetch(target, nil)
+    if chapter.nil? || chapter == @current_chapter
+      "[#{escape_mdx(text)}](##{target})"
+    else
+      "[#{escape_mdx(text)}](./#{chapter}##{target})"
+    end
+  end
 end

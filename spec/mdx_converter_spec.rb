@@ -45,4 +45,47 @@ RSpec.describe MdxConverter do
       expect(result.keys).to include('hello-world')
     end
   end
+
+  describe 'paragraphs and inline formatting' do
+    def chapter_content(source)
+      result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
+      result['ch']
+    end
+
+    it 'renders a plain paragraph' do
+      expect(chapter_content('Hello world.')).to include('Hello world.')
+    end
+
+    it 'escapes curly braces' do
+      expect(chapter_content('The {rd} register.')).to include('The \{rd\} register.')
+    end
+
+    it 'escapes bare less-than' do
+      expect(chapter_content('Value < 10.')).to include('Value \< 10.')
+    end
+
+    it 'renders bold' do
+      expect(chapter_content('*bold* text')).to include('**bold** text')
+    end
+
+    it 'renders italic' do
+      expect(chapter_content('_italic_ text')).to include('_italic_ text')
+    end
+
+    it 'renders monospace' do
+      expect(chapter_content('`mono` text')).to include('`mono` text')
+    end
+
+    it 'renders superscript' do
+      expect(chapter_content('^super^')).to include('<sup>super</sup>')
+    end
+
+    it 'renders subscript' do
+      expect(chapter_content('~sub~')).to include('<sub>sub</sub>')
+    end
+
+    it 'renders a URL link' do
+      expect(chapter_content('See https://riscv.org[RISC-V].')).to include('[RISC-V](https://riscv.org)')
+    end
+  end
 end
