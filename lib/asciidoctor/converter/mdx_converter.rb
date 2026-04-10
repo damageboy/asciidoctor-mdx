@@ -73,13 +73,13 @@ class MdxConverter < Asciidoctor::Converter::Base
   def convert_listing(node)
     lang = node.attr('language', nil, false)
     fence = lang ? "```#{lang}" : '```'
-    "#{fence}\n#{node.source}\n```\n\n"
+    "#{fence}\n#{escape_code_block(node.source)}\n```\n\n"
   end
 
   def convert_literal(node)
     lang = node.style == 'literal' ? nil : node.style
     fence = lang ? "```#{lang}" : '```'
-    "#{fence}\n#{node.source}\n```\n\n"
+    "#{fence}\n#{escape_code_block(node.source)}\n```\n\n"
   end
   def convert_stem(node)
     "```math\n#{node.content}\n```\n\n"
@@ -201,16 +201,45 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   def compute_col_widths(grid, ncols, nrows)
     widths = Array.new(ncols, 3)
+
+    # Pass 1: single-spanning cells set the baseline width for each column.
     nrows.times do |r|
       ncols.times do |c|
         slot = grid[r][c]
         next unless slot
-        next unless slot[:origin_row] == r && slot[:origin_col] == c  # origin slot only
-        next unless (slot[:cell].colspan || 1) == 1                    # single-column cells only
+        next unless slot[:origin_row] == r && slot[:origin_col] == c
+        next unless (slot[:cell].colspan || 1) == 1
         text = table_cell_text(slot[:cell])
         widths[c] = [widths[c], text.length + 2].max
       end
     end
+
+    # Pass 2: multi-spanning cells — if the content doesn't fit within the
+    # combined width of the spanned columns, distribute the deficit evenly.
+    # Process shorter spans first so their widths feed into wider spans.
+    spanning_cells = []
+    nrows.times do |r|
+      ncols.times do |c|
+        slot = grid[r][c]
+        next unless slot && slot[:origin_row] == r && slot[:origin_col] == c
+        colspan = slot[:cell].colspan || 1
+        next unless colspan > 1
+        spanning_cells << [colspan, c, slot[:cell]]
+      end
+    end
+    spanning_cells.sort_by { |colspan, _, _| colspan }.each do |colspan, c, cell|
+      text = table_cell_text(cell)
+      needed = text.length + 2
+      current = widths[c...(c + colspan)].sum + (colspan - 1)
+      next unless needed > current
+      deficit = needed - current
+      extra, remainder = deficit.divmod(colspan)
+      colspan.times do |i|
+        widths[c + i] += extra
+        widths[c + i] += 1 if i < remainder
+      end
+    end
+
     widths
   end
 
@@ -243,7 +272,10 @@ class MdxConverter < Asciidoctor::Converter::Base
       inner = cell.inner_document.blocks.map { |b| convert(b) }.join(' ').strip
       inner.gsub(/\n+/, ' ').gsub(/\s{2,}/, ' ')
     else
-      escape_inline_content(cell.text.strip)
+      # Collapse internal newlines (e.g. from AsciiDoc + continuation lines)
+      # to single spaces so grid-table rows stay on one line.
+      escaped = escape_inline_content(cell.text.strip)
+      escaped.gsub(/\n+/, ' ').gsub(/  +/, ' ')
     end
   end
 
@@ -387,6 +419,13 @@ class MdxConverter < Asciidoctor::Converter::Base
     else
       escape_mdx(node.text.to_s)
     end
+  end
+
+  # MDX v3 parses < as a JSX tag open even inside fenced code blocks.
+  # Escape it as \< so the MDX parser accepts it; JS template literals
+  # treat \< as a plain < at runtime, so the rendered code is correct.
+  def escape_code_block(str)
+    str.to_s.gsub('<', '\<')
   end
 
   def escape_inline_content(str)
