@@ -306,6 +306,52 @@ RSpec.describe MdxConverter do
         content = chapter_content(src)
         expect(content).to include('+')
       end
+
+      it 'renders separator lines with + at every column boundary' do
+        src2 = <<~ADOC
+          [cols="1,1,1"]
+          |===
+          2+| Span | C
+          | A | B  | C
+          |===
+        ADOC
+        content2 = chapter_content(src2)
+        lines = content2.lines.map(&:rstrip)
+        # Top border: first line starting with +, contains only +, -, chars
+        top_border = lines.find { |l| l.start_with?('+') }
+        expect(top_border).to match(/^\+[-+]+\+$/)
+        # Content line with colspan: has exactly 3 pipe chars (left + after span + after C)
+        span_line = lines.find { |l| l.include?('Span') }
+        expect(span_line.count('|')).to eq(3)
+      end
+
+      it 'renders = separator after header rows' do
+        src = <<~ADOC
+          [cols="1,1",options="header"]
+          |===
+          | Head1 | Head2
+          2+| Span body
+          |===
+        ADOC
+        content = chapter_content(src)
+        expect(content).to match(/\+[=+]+\+/)
+      end
+
+      it 'renders spaces in separator where a rowspan cell continues' do
+        src = <<~ADOC
+          [cols="1,1"]
+          |===
+          .2+| Tall | B1
+                    | B2
+          |===
+        ADOC
+        content = chapter_content(src)
+        lines = content.lines.map(&:rstrip)
+        # The separator between the two body rows must have spaces for col 0 (spanning)
+        # and dashes for col 1 (not spanning). Pattern: +<spaces>+<dashes>+
+        mid_sep = lines.find { |l| l.match?(/^\+\s+\+[-]+\+$/) }
+        expect(mid_sep).not_to be_nil
+      end
     end
   end
 

@@ -95,8 +95,74 @@ class MdxConverter < Asciidoctor::Converter::Base
     false
   end
 
+  # Renders one separator line (the +---+ lines between rows).
+  # r_above: logical row above (-1 for top border)
+  # r_below: logical row below (nrows for bottom border)
+  # use_equals: true for the header/body separator
+  def render_grid_separator(col_widths, grid, r_above, r_below, nrows, use_equals)
+    line = '+'
+    col_widths.each_with_index do |w, c|
+      spans_down = if r_above >= 0 && r_below < nrows
+        slot = grid[r_above][c]
+        slot && slot[:origin_col] == c &&
+          (slot[:cell].rowspan || 1) > 1 &&
+          (slot[:origin_row] + (slot[:cell].rowspan || 1) - 1) >= r_below
+      else
+        false
+      end
+      fill = spans_down ? ' ' : (use_equals ? '=' : '-')
+      line += fill * w + '+'
+    end
+    line
+  end
+
+  # Renders one content line for logical row r.
+  def render_grid_content_row(col_widths, grid, r, ncols)
+    line = '|'
+    c = 0
+    while c < ncols
+      slot = grid[r][c]
+      if slot.nil?
+        line += ' ' * col_widths[c] + '|'
+        c += 1
+      elsif slot[:origin_row] < r
+        # Rowspan continuation — blank
+        line += ' ' * col_widths[c] + '|'
+        c += 1
+      elsif slot[:origin_col] < c
+        # Already rendered as part of a colspan to the left — skip without emitting |
+        c += 1
+      else
+        # Origin cell for this row — emit content
+        cell = slot[:cell]
+        colspan = cell.colspan || 1
+        # Combined width: sum of column widths + (colspan-1) for the | chars between them
+        combined_width = col_widths[c...(c + colspan)].sum + (colspan - 1)
+        text = table_cell_text(cell)
+        # One space padding on left, left-align text, fill to combined_width - 1
+        line += ' ' + text.ljust(combined_width - 1) + '|'
+        c += colspan
+      end
+    end
+    line
+  end
+
   def convert_table_gridtable(node)
-    '' # stub — replaced in Task 5
+    ncols            = node.columns.size
+    grid, nrows, nhead = build_grid(node)
+    col_widths       = compute_col_widths(grid, ncols, nrows)
+    lines            = []
+
+    # Top border
+    lines << render_grid_separator(col_widths, grid, -1, 0, nrows, false)
+
+    nrows.times do |r|
+      lines << render_grid_content_row(col_widths, grid, r, ncols)
+      use_equals = nhead > 0 && r == nhead - 1
+      lines << render_grid_separator(col_widths, grid, r, r + 1, nrows, use_equals)
+    end
+
+    lines.join("\n") + "\n\n"
   end
 
   def build_grid(node)
