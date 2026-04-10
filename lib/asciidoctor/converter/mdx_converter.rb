@@ -77,7 +77,9 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
 
   def convert_literal(node)
-    "```\n#{node.source}\n```\n\n"
+    lang = node.style == 'literal' ? nil : node.style
+    fence = lang ? "```#{lang}" : '```'
+    "#{fence}\n#{node.source}\n```\n\n"
   end
   def convert_stem(node)
     "```math\n#{node.content}\n```\n\n"
