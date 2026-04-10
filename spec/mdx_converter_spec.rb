@@ -352,6 +352,23 @@ RSpec.describe MdxConverter do
         mid_sep = lines.find { |l| l.match?(/^\+\s+\+[-]+\+$/) }
         expect(mid_sep).not_to be_nil
       end
+
+      it 'renders correct separator for a cell with colspan and rowspan combined' do
+        src = <<~ADOC
+          [cols="1,1,1"]
+          |===
+          2.2+| Big | C1
+                    | C2
+          | A  | B  | C
+          |===
+        ADOC
+        content = chapter_content(src)
+        lines = content.lines.map(&:rstrip)
+        # Separator between rows 0 and 1: Big cell spans both cols 0 and 1 downward
+        # so cols 0 AND 1 must have spaces, col 2 must have dashes
+        mid_sep = lines.find { |l| l.match?(/^\+\s+\+\s+\+[-]+\+$/) }
+        expect(mid_sep).not_to be_nil
+      end
     end
   end
 

@@ -104,7 +104,7 @@ class MdxConverter < Asciidoctor::Converter::Base
     col_widths.each_with_index do |w, c|
       spans_down = if r_above >= 0 && r_below < nrows
         slot = grid[r_above][c]
-        slot && slot[:origin_col] == c &&
+        slot &&
           (slot[:cell].rowspan || 1) > 1 &&
           (slot[:origin_row] + (slot[:cell].rowspan || 1) - 1) >= r_below
       else
@@ -129,10 +129,9 @@ class MdxConverter < Asciidoctor::Converter::Base
         # Rowspan continuation — blank
         line += ' ' * col_widths[c] + '|'
         c += 1
-      elsif slot[:origin_col] < c
-        # Already rendered as part of a colspan to the left — skip without emitting |
-        c += 1
       else
+        # Interior colspan columns are never reached here: the origin branch does
+        # c += colspan, which skips past them entirely.
         # Origin cell for this row — emit content
         cell = slot[:cell]
         colspan = cell.colspan || 1
