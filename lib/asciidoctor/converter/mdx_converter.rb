@@ -99,6 +99,41 @@ class MdxConverter < Asciidoctor::Converter::Base
     '' # stub — replaced in Task 5
   end
 
+  def build_grid(node)
+    ncols = node.columns.size
+    nhead = node.rows.head.size
+    all_rows = node.rows.head + node.rows.body + node.rows.foot
+    nrows = all_rows.size
+    grid = Array.new(nrows) { Array.new(ncols) }
+    # pending[col] = { cell:, origin_row:, origin_col:, rows_left: }
+    pending = {}
+
+    all_rows.each_with_index do |row, row_idx|
+      cell_queue = row.dup
+      col = 0
+      while col < ncols
+        if pending[col]
+          entry = pending[col]
+          cs = entry[:cell].colspan || 1
+          cs.times { |dc| grid[row_idx][col + dc] = { cell: entry[:cell], origin_row: entry[:origin_row], origin_col: entry[:origin_col] } }
+          entry[:rows_left] -= 1
+          pending.delete(col) if entry[:rows_left] == 0
+          col += cs
+        else
+          cell = cell_queue.shift
+          break unless cell
+          cs = cell.colspan || 1
+          rs = cell.rowspan || 1
+          cs.times { |dc| grid[row_idx][col + dc] = { cell: cell, origin_row: row_idx, origin_col: col } }
+          pending[col] = { cell: cell, origin_row: row_idx, origin_col: col, rows_left: rs - 1 } if rs > 1
+          col += cs
+        end
+      end
+    end
+
+    [grid, nrows, nhead]
+  end
+
   def convert_table(node)
     return convert_table_gridtable(node) if table_is_complex?(node)
 
