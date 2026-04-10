@@ -364,9 +364,10 @@ RSpec.describe MdxConverter do
         ADOC
         content = chapter_content(src)
         lines = content.lines.map(&:rstrip)
-        # Separator between rows 0 and 1: Big cell spans both cols 0 and 1 downward
-        # so cols 0 AND 1 must have spaces, col 2 must have dashes
-        mid_sep = lines.find { |l| l.match?(/^\+\s+\+\s+\+[-]+\+$/) }
+        # Separator between rows 0 and 1: Big spans cols 0-1 with rowspan=2.
+        # Multi-column span collapses to one space block + | boundary; col 2 gets dashes.
+        # Pattern: +<spaces>|<dashes>+
+        mid_sep = lines.find { |l| l.match?(/^\+\s+\|[-]+\+$/) }
         expect(mid_sep).not_to be_nil
       end
     end

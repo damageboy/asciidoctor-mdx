@@ -99,19 +99,38 @@ class MdxConverter < Asciidoctor::Converter::Base
   # r_above: logical row above (-1 for top border)
   # r_below: logical row below (nrows for bottom border)
   # use_equals: true for the header/body separator
+  #
+  # For cells that span multiple rows (rowspan > 1):
+  #   - colspan == 1: the column shows spaces with + at both ends (standard rowspan)
+  #   - colspan >  1: the spanned columns are merged into one block with spaces and
+  #     a | at the right boundary (not +). This follows the @adobe/remark-gridtables
+  #     convention where col spans are indicated by missing | delimiters.
   def render_grid_separator(col_widths, grid, r_above, r_below, nrows, use_equals)
+    ncols = col_widths.size
     line = '+'
-    col_widths.each_with_index do |w, c|
-      spans_down = if r_above >= 0 && r_below < nrows
-        slot = grid[r_above][c]
-        slot &&
-          (slot[:cell].rowspan || 1) > 1 &&
-          (slot[:origin_row] + (slot[:cell].rowspan || 1) - 1) >= r_below
+    c = 0
+    while c < ncols
+      slot = (r_above >= 0 && r_below < nrows) ? grid[r_above][c] : nil
+      spans_down = slot &&
+        (slot[:cell].rowspan || 1) > 1 &&
+        slot[:origin_row] + (slot[:cell].rowspan || 1) - 1 >= r_below
+
+      if spans_down && slot[:origin_col] == c && (slot[:cell].colspan || 1) > 1
+        # Multi-column span: merge all spanned columns into one space block, | at right
+        colspan = slot[:cell].colspan || 1
+        combined_w = col_widths[c...(c + colspan)].sum + (colspan - 1)
+        line += ' ' * combined_w + '|'
+        c += colspan
+      elsif spans_down && slot[:origin_col] == c
+        # Single-column span: spaces with + at right boundary
+        line += ' ' * col_widths[c] + '+'
+        c += 1
       else
-        false
+        # Non-spanning column (or interior of a span — unreachable via jumping)
+        fill = use_equals ? '=' : '-'
+        line += fill * col_widths[c] + '+'
+        c += 1
       end
-      fill = spans_down ? ' ' : (use_equals ? '=' : '-')
-      line += fill * w + '+'
     end
     line
   end
@@ -125,9 +144,15 @@ class MdxConverter < Asciidoctor::Converter::Base
       if slot.nil?
         line += ' ' * col_widths[c] + '|'
         c += 1
+      elsif slot[:origin_row] < r && slot[:origin_col] == c
+        # Rowspan continuation at the origin column of the span.
+        # For colspan > 1, merge all spanned columns into one space block.
+        colspan = slot[:cell].colspan || 1
+        combined_w = colspan > 1 ? col_widths[c...(c + colspan)].sum + (colspan - 1) : col_widths[c]
+        line += ' ' * combined_w + '|'
+        c += colspan
       elsif slot[:origin_row] < r
-        # Rowspan continuation — blank
-        line += ' ' * col_widths[c] + '|'
+        # Interior column of a multi-colspan continuation — skip (origin branch jumped here)
         c += 1
       else
         # Interior colspan columns are never reached here: the origin branch does
