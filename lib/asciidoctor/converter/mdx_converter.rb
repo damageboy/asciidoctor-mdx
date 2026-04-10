@@ -134,6 +134,21 @@ class MdxConverter < Asciidoctor::Converter::Base
     [grid, nrows, nhead]
   end
 
+  def compute_col_widths(grid, ncols, nrows)
+    widths = Array.new(ncols, 3)
+    nrows.times do |r|
+      ncols.times do |c|
+        slot = grid[r][c]
+        next unless slot
+        next unless slot[:origin_row] == r && slot[:origin_col] == c  # origin slot only
+        next unless (slot[:cell].colspan || 1) == 1                    # single-column cells only
+        text = table_cell_text(slot[:cell])
+        widths[c] = [widths[c], text.length + 2].max
+      end
+    end
+    widths
+  end
+
   def convert_table(node)
     return convert_table_gridtable(node) if table_is_complex?(node)
 
