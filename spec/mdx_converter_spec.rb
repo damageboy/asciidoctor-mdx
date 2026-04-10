@@ -262,6 +262,51 @@ RSpec.describe MdxConverter do
       header_idx = lines.index { |l| l.include?('Name') && l.include?('Value') }
       expect(lines[header_idx + 1]).to match(/^\|(\s*---\s*\|)+$/)
     end
+
+    describe 'grid tables (colspan/rowspan)' do
+      def chapter_content(source)
+        result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
+        result['ch']
+      end
+
+      it 'uses GFM pipe table for simple tables (no spans)' do
+        src = <<~ADOC
+          [cols="1,1",options="header"]
+          |===
+          | Name | Value
+          | foo  | 1
+          |===
+        ADOC
+        content = chapter_content(src)
+        expect(content).to include('| Name | Value |')
+        expect(content).not_to include('+---')
+      end
+
+      it 'uses grid table format for tables with colspan' do
+        src = <<~ADOC
+          [cols="1,1,1"]
+          |===
+          2+| Span Two | C
+          | A | B      | C
+          |===
+        ADOC
+        content = chapter_content(src)
+        expect(content).to include('+')
+        expect(content).to include('---')
+      end
+
+      it 'uses grid table format for tables with rowspan' do
+        src = <<~ADOC
+          [cols="1,1"]
+          |===
+          .2+| Tall | B1
+                   | B2
+          |===
+        ADOC
+        content = chapter_content(src)
+        expect(content).to include('+')
+      end
+    end
   end
 
   describe 'cross-references' do

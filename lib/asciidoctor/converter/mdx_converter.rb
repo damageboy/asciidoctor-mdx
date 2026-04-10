@@ -82,25 +82,38 @@ class MdxConverter < Asciidoctor::Converter::Base
   def convert_stem(node)
     "```math\n#{node.content}\n```\n\n"
   end
-  def convert_table(node)
-    rows = []
+  def table_is_complex?(node)
+    [node.rows.head, node.rows.body, node.rows.foot].each do |section|
+      section.each do |row|
+        row.each do |cell|
+          return true if (cell.colspan || 1) > 1 || (cell.rowspan || 1) > 1
+        end
+      end
+    end
+    false
+  end
 
+  def convert_table_gridtable(node)
+    '' # stub — replaced in Task 5
+  end
+
+  def convert_table(node)
+    return convert_table_gridtable(node) if table_is_complex?(node)
+
+    rows = []
     if node.rows.head.any?
       header_cells = node.rows.head.first.map { |cell| table_cell_text(cell).gsub('|', '\|') }
       rows << "| #{header_cells.join(' | ')} |"
       rows << "| #{header_cells.map { '---' }.join(' | ')} |"
     end
-
     node.rows.body.each do |row|
       cells = row.map { |cell| table_cell_text(cell).gsub('|', '\\|') }
       rows << "| #{cells.join(' | ')} |"
     end
-
     node.rows.foot.each do |row|
       cells = row.map { |cell| table_cell_text(cell).gsub('|', '\\|') }
       rows << "| #{cells.join(' | ')} |"
     end
-
     "#{rows.join("\n")}\n\n"
   end
 
