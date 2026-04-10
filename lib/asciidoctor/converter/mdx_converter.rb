@@ -114,19 +114,19 @@ class MdxConverter < Asciidoctor::Converter::Base
       while col < ncols
         if pending[col]
           entry = pending[col]
-          cs = entry[:cell].colspan || 1
-          cs.times { |dc| grid[row_idx][col + dc] = { cell: entry[:cell], origin_row: entry[:origin_row], origin_col: entry[:origin_col] } }
+          colspan = entry[:cell].colspan || 1
+          colspan.times { |col_offset| grid[row_idx][col + col_offset] = { cell: entry[:cell], origin_row: entry[:origin_row], origin_col: entry[:origin_col] } }
           entry[:rows_left] -= 1
           pending.delete(col) if entry[:rows_left] == 0
-          col += cs
+          col += colspan
         else
           cell = cell_queue.shift
           break unless cell
-          cs = cell.colspan || 1
-          rs = cell.rowspan || 1
-          cs.times { |dc| grid[row_idx][col + dc] = { cell: cell, origin_row: row_idx, origin_col: col } }
-          pending[col] = { cell: cell, origin_row: row_idx, origin_col: col, rows_left: rs - 1 } if rs > 1
-          col += cs
+          colspan = cell.colspan || 1
+          rowspan = cell.rowspan || 1
+          colspan.times { |col_offset| grid[row_idx][col + col_offset] = { cell: cell, origin_row: row_idx, origin_col: col } }
+          pending[col] = { cell: cell, origin_row: row_idx, origin_col: col, rows_left: rowspan - 1 } if rowspan > 1
+          col += colspan
         end
       end
     end
