@@ -66,14 +66,14 @@ RSpec.describe MdxConverter do
       ADOC
     end
 
-    it 'renders subsections as ## headings with MDX comment ID' do
+    it 'renders subsections as ## headings with Docusaurus heading ID' do
       result = convert_to_mdx(source)
-      expect(result['intro']).to include('## Overview {/* #overview */}')
+      expect(result['intro']).to include('## Overview {#overview}')
     end
 
     it 'renders level 3 subsections as ### headings' do
       result = convert_to_mdx(source)
-      expect(result['intro']).to include('### Details {/* #details */}')
+      expect(result['intro']).to include('### Details {#details}')
     end
 
     it 'does not emit a heading for the top-level chapter section itself' do
@@ -84,7 +84,7 @@ RSpec.describe MdxConverter do
     it 'escapes curly braces in heading titles' do
       src = "= Doc\n\n[#ch]\n== Ch\n\n[#h2]\n=== Heading {foo}\n\nText."
       result = convert_to_mdx(src)
-      expect(result['ch']).to include('## Heading \{foo\} {/* #h2 */}')
+      expect(result['ch']).to include('## Heading \{foo\} {#h2}')
     end
   end
 

@@ -114,10 +114,10 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
 
   def convert_section(node)
-    hashes     = '#' * node.level
-    title      = escape_mdx(node.title)
-    id_comment = node.id ? " {/* ##{node.id} */}" : ''
-    "#{hashes} #{title}#{id_comment}\n\n#{node.content}"
+    hashes    = '#' * node.level
+    title     = escape_mdx(node.title)
+    id_suffix = node.id ? " {##{node.id}}" : ''
+    "#{hashes} #{title}#{id_suffix}\n\n#{node.content}"
   end
   def convert_listing(node)
     lang = node.attr('language', nil, false)
@@ -475,9 +475,9 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
 
   def convert_floating_title(node)
-    hashes     = '#' * node.level
-    id_comment = node.id ? " {/* ##{node.id} */}" : ''
-    "#{hashes} #{escape_mdx(node.title)}#{id_comment}\n\n"
+    hashes    = '#' * node.level
+    id_suffix = node.id ? " {##{node.id}}" : ''
+    "#{hashes} #{escape_mdx(node.title)}#{id_suffix}\n\n"
   end
   def convert_page_break(node)      = ''
   def convert_inline_image(node)   = ''
