@@ -488,4 +488,116 @@ RSpec.describe MdxConverter do
       expect(chapter_content('See https://riscv.org[RISC-V].')).to include('[RISC-V](https://riscv.org)')
     end
   end
+
+  describe 'sidebar generation' do
+    it 'does not write sidebar.json when mdx-sidebar-dir is absent' do
+      Dir.mktmpdir do |tmpdir|
+        Asciidoctor.convert(
+          "= Doc\n\n[#ch]\n== Chapter\n\nContent.",
+          backend: 'mdx', safe: :safe, standalone: true, to_file: false,
+          attributes: { 'mdxdir' => tmpdir }
+        )
+        expect(File.exist?(File.join(tmpdir, 'sidebar.json'))).to be false
+      end
+    end
+
+    it 'writes a doc item for a leaf chapter (no sub-sections)' do
+      src = "= Doc\n\n[#ch1]\n== Chapter One\n\nContent."
+      data = convert_to_sidebar(src, dir: 'unprivileged')
+      expect(data).to eq([
+        { 'type' => 'doc', 'id' => 'unprivileged/ch1', 'label' => 'Chapter One' }
+      ])
+    end
+
+    it 'writes a category with doc link for a chapter with level-2 sections' do
+      src = <<~ADOC
+        = Doc
+
+        [#ch1]
+        == Chapter One
+
+        [#sec1]
+        === Section One
+
+        Content.
+
+        [#sec2]
+        === Section Two
+
+        Content.
+      ADOC
+      data = convert_to_sidebar(src, dir: 'unprivileged')
+      chapter = data.first
+      expect(chapter['type']).to eq('category')
+      expect(chapter['label']).to eq('Chapter One')
+      expect(chapter['link']).to eq({ 'type' => 'doc', 'id' => 'unprivileged/ch1' })
+      expect(chapter['collapsible']).to eq(true)
+      expect(chapter['collapsed']).to eq(false)
+      expect(chapter['items']).to eq([
+        { 'type' => 'link', 'label' => 'Section One', 'href' => 'unprivileged/ch1#sec1' },
+        { 'type' => 'link', 'label' => 'Section Two', 'href' => 'unprivileged/ch1#sec2' }
+      ])
+    end
+
+    it 'wraps a level-2 section with children in a category, self-link first' do
+      src = <<~ADOC
+        = Doc
+
+        [#ch1]
+        == Chapter One
+
+        [#sec1]
+        === Section One
+
+        [#sub1]
+        ==== Sub One
+
+        [#sub2]
+        ==== Sub Two
+
+        Content.
+      ADOC
+      data = convert_to_sidebar(src, dir: 'unprivileged')
+      chapter = data.first
+      sec1 = chapter['items'].first
+      expect(sec1['type']).to eq('category')
+      expect(sec1['label']).to eq('Section One')
+      expect(sec1['collapsible']).to eq(true)
+      expect(sec1['collapsed']).to eq(false)
+      expect(sec1['items']).to eq([
+        { 'type' => 'link', 'label' => 'Section One', 'href' => 'unprivileged/ch1#sec1' },
+        { 'type' => 'link', 'label' => 'Sub One',     'href' => 'unprivileged/ch1#sub1' },
+        { 'type' => 'link', 'label' => 'Sub Two',     'href' => 'unprivileged/ch1#sub2' }
+      ])
+    end
+
+    it 'does not include sections deeper than level 3' do
+      src = <<~ADOC
+        = Doc
+
+        [#ch1]
+        == Chapter One
+
+        [#sec1]
+        === Section One
+
+        [#sub1]
+        ==== Sub One
+
+        [#deep1]
+        ===== Deep Section
+
+        Content.
+      ADOC
+      data = convert_to_sidebar(src, dir: 'unprivileged')
+      all_labels = flatten_labels(data)
+      expect(all_labels).not_to include('Deep Section')
+    end
+
+    def flatten_labels(items)
+      items.flat_map do |item|
+        [item['label']] + (item['items'] ? flatten_labels(item['items']) : [])
+      end
+    end
+  end
 end
