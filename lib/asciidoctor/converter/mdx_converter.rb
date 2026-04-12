@@ -76,8 +76,8 @@ class MdxConverter < Asciidoctor::Converter::Base
   def collect_sidebar_node(section, chapter_slug)
     return nil if section.level > 3  # level 1=chapter(==), 2=section(===), 3=subsection(====); skip level 4+
     children = section.sections.filter_map { |sub| collect_sidebar_node(sub, chapter_slug) }
-    { title: section.title, anchor_id: section.id, chapter_slug: chapter_slug,
-      level: section.level, children: children }
+    { title: section.title, anchor_id: section.id && sanitize_anchor_id(section.id),
+      chapter_slug: chapter_slug, level: section.level, children: children }
   end
 
   def build_sidebar_item(node)
@@ -161,7 +161,7 @@ class MdxConverter < Asciidoctor::Converter::Base
   def convert_section(node)
     hashes    = '#' * node.level
     title     = escape_mdx(node.title)
-    id_suffix = node.id ? " {##{node.id}}" : ''
+    id_suffix = node.id ? " {##{sanitize_anchor_id(node.id)}}" : ''
     "#{hashes} #{title}#{id_suffix}\n\n#{node.content}"
   end
   def convert_listing(node)
@@ -521,7 +521,7 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   def convert_floating_title(node)
     hashes    = '#' * node.level
-    id_suffix = node.id ? " {##{node.id}}" : ''
+    id_suffix = node.id ? " {##{sanitize_anchor_id(node.id)}}" : ''
     "#{hashes} #{escape_mdx(node.title)}#{id_suffix}\n\n"
   end
   def convert_page_break(node)      = ''
@@ -602,17 +602,22 @@ class MdxConverter < Asciidoctor::Converter::Base
     str && !str.to_s.strip.empty? ? str.to_s : nil
   end
 
+  def sanitize_anchor_id(id)
+    id.gsub(':', '-').gsub(/-+/, '-')
+  end
+
   def resolve_xref(node)
     target  = node.attr('refid') || node.target.to_s.sub(/^#/, '')
     text    = presence(node.text) || target
     chapter = @xref_map&.fetch(target, nil)
+    anchor  = sanitize_anchor_id(target)
     if chapter.nil? || chapter == @current_chapter
-      "[#{escape_mdx(text)}](##{target})"
+      "[#{escape_mdx(text)}](##{anchor})"
     elsif chapter == target
       # target IS the chapter (top-level section); no anchor fragment needed
       "[#{escape_mdx(text)}](./#{chapter})"
     else
-      "[#{escape_mdx(text)}](./#{chapter}##{target})"
+      "[#{escape_mdx(text)}](./#{chapter}##{anchor})"
     end
   end
 end
