@@ -591,12 +591,14 @@ RSpec.describe MdxConverter do
       ADOC
       data = convert_to_sidebar(src, dir: 'unprivileged')
       all_labels = flatten_labels(data)
+      expect(all_labels).to include('Chapter One', 'Section One', 'Sub One')
       expect(all_labels).not_to include('Deep Section')
     end
 
     def flatten_labels(items)
       items.flat_map do |item|
-        [item['label']] + (item['items'] ? flatten_labels(item['items']) : [])
+        labels = item['label'] ? [item['label']] : []
+        labels + (item['items'] ? flatten_labels(item['items']) : [])
       end
     end
   end
