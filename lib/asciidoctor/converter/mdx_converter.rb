@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'yaml'
+require 'pathname'
 
 class MdxConverter < Asciidoctor::Converter::Base
   register_for 'mdx'
@@ -15,6 +16,19 @@ class MdxConverter < Asciidoctor::Converter::Base
       slug = section_slug(section)
       @chapter_slugs[section.object_id] = slug
       collect_anchors(section, slug)
+    end
+
+    # Replay attribute entries from the preamble and other pre-section blocks.
+    # Asciidoctor stores body attribute-entry lines (e.g. :check: ✓ from the
+    # included symbols.adoc) in the attributes of the block immediately after
+    # them. Those entries are played back via Document#playback_attributes when
+    # a block's #convert is called. Because we skip the preamble in our
+    # two-pass rendering, those attributes would otherwise remain unresolved.
+    # Converting the pre-section blocks and discarding the output replays the
+    # entries as a side effect, making {check}, {ge}, {le}, etc. available.
+    doc.blocks.each do |block|
+      break if block.context == :section
+      block.convert
     end
 
     # Pass 2: emit one .mdx file per top-level section
@@ -50,18 +64,53 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
 
   def render_chapter(section, position)
+    # Replay any attribute entries stored directly on this section node.
+    # This handles the case where body attribute entries (e.g. from an include
+    # immediately before the first section with no preamble text) are attached
+    # to the section block rather than to a preamble sub-block.
+    section.document.playback_attributes(section.attributes)
+    doc = section.document
     slug = @chapter_slugs[section.object_id]
     title = section.title
-    frontmatter = [
+    frontmatter_lines = [
       '---',
       "title: #{title.to_yaml.strip.sub(/\A--- /, '')}",
       "sidebar_label: #{title.to_yaml.strip.sub(/\A--- /, '')}",
       "sidebar_position: #{position}",
       "id: #{slug}",
-      '---',
-      ''
-    ].join("\n")
+    ]
+    edit_url = build_custom_edit_url(section, doc)
+    frontmatter_lines << "custom_edit_url: #{edit_url}" if edit_url
+    frontmatter_lines += ['---', '']
+    frontmatter = frontmatter_lines.join("\n")
     "#{frontmatter}\n#{section.content}\n"
+  end
+
+  # Builds the custom_edit_url front matter value for a chapter section.
+  #
+  # Requires the document attribute +github-edit-url-base+ to be set (e.g.
+  # https://github.com/riscv/riscv-isa-manual/blob/main).  An optional
+  # +github-local-root+ attribute names the local directory that corresponds
+  # to the root of the GitHub repository; it defaults to the parent of
+  # +docdir+ (one level above the directory containing the main .adoc file).
+  def build_custom_edit_url(section, doc)
+    base_url = doc.attr('github-edit-url-base', nil, false)
+    return nil unless base_url
+
+    source_file = section.source_location&.file
+    return nil unless source_file
+
+    # Local root: explicit attribute, or parent of docdir (i.e. repo root
+    # when source files live in a subdirectory such as src/).
+    local_root = doc.attr('github-local-root', nil, false) ||
+                 File.dirname(doc.attr('docdir', '.'))
+
+    rel_path = Pathname.new(File.expand_path(source_file))
+                       .relative_path_from(Pathname.new(File.expand_path(local_root)))
+                       .to_s
+    "#{base_url.chomp('/')}/#{rel_path}"
+  rescue ArgumentError
+    nil
   end
 
   def convert_section(node)
@@ -72,6 +121,7 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
   def convert_listing(node)
     lang = node.attr('language', nil, false)
+    lang ||= node.style if node.style && !%w[source listing].include?(node.style)
     fence = lang ? "```#{lang}" : '```'
     "#{fence}\n#{escape_code_block(node.source)}\n```\n\n"
   end
@@ -306,8 +356,43 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   def convert_image(node)
     alt  = escape_mdx(node.attr('alt', node.attr('target'), false).to_s)
-    path = node.image_uri(node.attr('target'))
+    path = build_mdx_image_path(node)
     "![#{alt}](#{path})\n\n"
+  end
+
+  # Returns the image URL to embed in MDX output.
+  #
+  # When the +mdx-images-url+ document attribute is set, images are rewritten
+  # to site-root-relative URLs suitable for Docusaurus static serving:
+  #
+  #   mdx-images-url   Base URL under which images are served (e.g. /img/riscv-isa/)
+  #   mdx-images-root  Local filesystem root that corresponds to mdx-images-url.
+  #                    Defaults to docdir joined with imagesdir.
+  #
+  # Without +mdx-images-url+, falls back to the standard Asciidoctor image_uri
+  # (which respects the :imagesdir: document attribute).
+  def build_mdx_image_path(node)
+    target      = node.attr('target')
+    images_url  = node.document.attr('mdx-images-url', nil, false)
+    return node.image_uri(target) unless images_url
+
+    doc       = node.document
+    docdir    = doc.attr('docdir', '.', false).to_s
+    imagesdir = doc.attr('imagesdir', '', false).to_s
+
+    # Resolve the absolute filesystem path of the image.
+    abs_image = File.expand_path(File.join(imagesdir, target), docdir)
+
+    # Make it relative to the images root (local counterpart of mdx-images-url).
+    images_root = doc.attr('mdx-images-root', nil, false)
+    images_root ||= File.expand_path(imagesdir, docdir)
+    rel_path = Pathname.new(abs_image)
+                       .relative_path_from(Pathname.new(File.expand_path(images_root)))
+                       .to_s
+
+    "#{images_url.chomp('/')}/#{rel_path}"
+  rescue ArgumentError
+    node.image_uri(target)
   end
   ADMONITION_TYPES = {
     'NOTE'      => 'note',
@@ -426,7 +511,7 @@ class MdxConverter < Asciidoctor::Converter::Base
     when :latexmath   then "$#{text}$"
     when :asciimath   then "$#{text}$"
     when :mark        then "**#{text}**"
-    else escape_mdx(text)
+    else text
     end
   end
 
