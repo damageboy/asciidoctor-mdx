@@ -76,7 +76,8 @@ class MdxConverter < Asciidoctor::Converter::Base
   def collect_sidebar_node(section, chapter_slug)
     return nil if section.level > 3  # level 1=chapter(==), 2=section(===), 3=subsection(====); skip level 4+
     children = section.sections.filter_map { |sub| collect_sidebar_node(sub, chapter_slug) }
-    { title: section.title, anchor_id: section.id && sanitize_anchor_id(section.id),
+    number = section.numbered ? "#{section.sectnum.chomp('.')} " : ''
+    { title: "#{number}#{section.title}", anchor_id: section.id && sanitize_anchor_id(section.id),
       chapter_slug: chapter_slug, level: section.level, children: children }
   end
 
@@ -91,7 +92,7 @@ class MdxConverter < Asciidoctor::Converter::Base
       else
         { 'type' => 'category', 'label' => title,
           'link' => { 'type' => 'doc', 'id' => id },
-          'collapsible' => true, 'collapsed' => false,
+          'collapsible' => true, 'collapsed' => true,
           'items' => node[:children].map { |c| build_sidebar_item(c) } }
       end
     else
@@ -116,7 +117,8 @@ class MdxConverter < Asciidoctor::Converter::Base
     section.document.playback_attributes(section.attributes)
     doc = section.document
     slug = @chapter_slugs[section.object_id]
-    title = section.title
+    number = section.numbered ? "#{section.sectnum.chomp('.')} " : ''
+    title = "#{number}#{section.title}"
     frontmatter_lines = [
       '---',
       "title: #{title.to_yaml.strip.sub(/\A--- /, '')}",
@@ -160,9 +162,10 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   def convert_section(node)
     hashes    = '#' * node.level
+    number    = node.numbered ? "#{node.sectnum.chomp('.')} " : ''
     title     = escape_mdx(node.title)
     id_suffix = node.id ? " {##{sanitize_anchor_id(node.id)}}" : ''
-    "#{hashes} #{title}#{id_suffix}\n\n#{node.content}"
+    "#{hashes} #{number}#{title}#{id_suffix}\n\n#{node.content}"
   end
   def convert_listing(node)
     lang = node.attr('language', nil, false)

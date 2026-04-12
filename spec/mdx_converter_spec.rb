@@ -86,6 +86,58 @@ RSpec.describe MdxConverter do
       result = convert_to_mdx(src)
       expect(result['ch']).to include('## Heading \{foo\} {#h2}')
     end
+
+    context 'with :sectnums:' do
+      let(:source) do
+        <<~ADOC
+          = Doc
+          :sectnums:
+
+          [#chone]
+          == Chapter One
+
+          [#sec1]
+          === Section One
+
+          Text.
+
+          [#sec2]
+          === Section Two
+
+          Text.
+
+          [#chtwo]
+          == Chapter Two
+
+          [#sec3]
+          === Section Three
+
+          Text.
+        ADOC
+      end
+
+      it 'prefixes subsection headings with dotted numbers' do
+        result = convert_to_mdx(source)
+        expect(result['chone']).to include('## 1.1 Section One {#sec1}')
+        expect(result['chone']).to include('## 1.2 Section Two {#sec2}')
+        expect(result['chtwo']).to include('## 2.1 Section Three {#sec3}')
+      end
+
+      it 'includes chapter number in frontmatter title and sidebar_label' do
+        result = convert_to_mdx(source)
+        expect(result['chone']).to include('title: 1 Chapter One')
+        expect(result['chone']).to include('sidebar_label: 1 Chapter One')
+        expect(result['chtwo']).to include('title: 2 Chapter Two')
+      end
+
+      it 'does not add numbers when :sectnums: is absent' do
+        src = "= Doc\n\n[#ch]\n== Chapter\n\n[#s1]\n=== Section\n\nText."
+        result = convert_to_mdx(src)
+        expect(result['ch']).to include('## Section {#s1}')
+        expect(result['ch']).not_to match(/## \d/)
+        expect(result['ch']).to include('title: Chapter')
+      end
+    end
   end
 
   describe 'heading ID sanitization' do
@@ -611,7 +663,7 @@ RSpec.describe MdxConverter do
       expect(chapter['label']).to eq('Chapter One')
       expect(chapter['link']).to eq({ 'type' => 'doc', 'id' => 'unprivileged/ch1' })
       expect(chapter['collapsible']).to eq(true)
-      expect(chapter['collapsed']).to eq(false)
+      expect(chapter['collapsed']).to eq(true)
       expect(chapter['items']).to eq([
         { 'type' => 'link', 'label' => 'Section One', 'href' => 'unprivileged/ch1#sec1' },
         { 'type' => 'link', 'label' => 'Section Two', 'href' => 'unprivileged/ch1#sec2' }
@@ -672,6 +724,30 @@ RSpec.describe MdxConverter do
       all_labels = flatten_labels(data)
       expect(all_labels).to include('Chapter One', 'Section One', 'Sub One')
       expect(all_labels).not_to include('Deep Section')
+    end
+
+    it 'prefixes sidebar labels with section numbers when :sectnums: is set' do
+      src = <<~ADOC
+        = Doc
+        :sectnums:
+
+        [#ch1]
+        == Chapter One
+
+        [#sec1]
+        === Section One
+
+        Content.
+
+        [#ch2]
+        == Chapter Two
+
+        Content.
+      ADOC
+      data = convert_to_sidebar(src, dir: 'unprivileged')
+      expect(data[0]['label']).to eq('1 Chapter One')
+      expect(data[1]['label']).to eq('2 Chapter Two')
+      expect(data[0]['items'][0]['label']).to eq('1.1 Section One')
     end
 
     def flatten_labels(items)
