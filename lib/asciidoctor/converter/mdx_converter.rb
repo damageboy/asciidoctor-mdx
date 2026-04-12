@@ -74,7 +74,7 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
 
   def collect_sidebar_node(section, chapter_slug)
-    return nil if section.level > 3
+    return nil if section.level > 3  # level 1=chapter(==), 2=section(===), 3=subsection(====); skip level 4+
     children = section.sections.filter_map { |sub| collect_sidebar_node(sub, chapter_slug) }
     { title: section.title, anchor_id: section.id, chapter_slug: chapter_slug,
       level: section.level, children: children }
