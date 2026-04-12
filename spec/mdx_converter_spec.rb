@@ -88,6 +88,85 @@ RSpec.describe MdxConverter do
     end
   end
 
+  describe 'heading ID sanitization' do
+    it 'replaces colons in section heading IDs with hyphens' do
+      src = "= Doc\n\n[#ch]\n== Ch\n\n[#sec:overview]\n=== Overview\n\nText."
+      result = convert_to_mdx(src)
+      expect(result['ch']).to include('{#sec-overview}')
+      expect(result['ch']).not_to include('{#sec:overview}')
+    end
+
+    it 'replaces multiple colons in a heading ID' do
+      src = "= Doc\n\n[#ch]\n== Ch\n\n[#sec:memory:acqrel]\n=== Acqrel\n\nText."
+      result = convert_to_mdx(src)
+      expect(result['ch']).to include('{#sec-memory-acqrel}')
+    end
+
+    it 'leaves IDs without colons unchanged in headings' do
+      src = "= Doc\n\n[#ch]\n== Ch\n\n[#_csr_instructions]\n=== CSR\n\nText."
+      result = convert_to_mdx(src)
+      expect(result['ch']).to include('{#_csr_instructions}')
+    end
+
+    it 'sanitizes anchor in same-chapter xref link' do
+      src = <<~ADOC
+        = Doc
+
+        [#ch]
+        == Ch
+
+        See <<sec:overview,Overview>>.
+
+        [#sec:overview]
+        === Overview
+
+        Text.
+      ADOC
+      result = convert_to_mdx(src)
+      expect(result['ch']).to include('[Overview](#sec-overview)')
+      expect(result['ch']).not_to include('#sec:overview')
+    end
+
+    it 'sanitizes anchor in cross-chapter xref link' do
+      src = <<~ADOC
+        = Doc
+
+        [#ch-a]
+        == Chapter A
+
+        See <<sec:detail,Detail>>.
+
+        [#ch-b]
+        == Chapter B
+
+        [#sec:detail]
+        === Detail
+
+        Text.
+      ADOC
+      result = convert_to_mdx(src)
+      expect(result['ch-a']).to include('[Detail](./ch-b#sec-detail)')
+      expect(result['ch-a']).not_to include('#sec:detail')
+    end
+
+    it 'sanitizes colon IDs in sidebar anchor hrefs' do
+      src = <<~ADOC
+        = Doc
+
+        [#ch1]
+        == Chapter One
+
+        [#sec:one]
+        === Section One
+
+        Content.
+      ADOC
+      data = convert_to_sidebar(src, dir: 'unprivileged')
+      chapter = data.first
+      expect(chapter['items'].first['href']).to eq('unprivileged/ch1#sec-one')
+    end
+  end
+
   describe 'code blocks' do
     def chapter_content(source)
       result = convert_to_mdx("= Doc\n\n[#ch]\n== Ch\n\n#{source}")
