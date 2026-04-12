@@ -603,7 +603,7 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
 
   def sanitize_anchor_id(id)
-    id.gsub(':', '-').gsub(/-+/, '-')
+    id.to_s.gsub(':', '-').gsub(/-+/, '-').gsub(/^-+|-+$/, '')
   end
 
   def resolve_xref(node)
