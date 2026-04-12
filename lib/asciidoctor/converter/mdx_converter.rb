@@ -101,9 +101,9 @@ class MdxConverter < Asciidoctor::Converter::Base
         { 'type' => 'link', 'label' => title, 'href' => href }
       else
         { 'type' => 'category', 'label' => title,
+          'link' => { 'type' => 'link', 'href' => href },
           'collapsible' => true, 'collapsed' => false,
-          'items' => [{ 'type' => 'link', 'label' => title, 'href' => href }] +
-                     node[:children].map { |c| build_sidebar_item(c) } }
+          'items' => node[:children].map { |c| build_sidebar_item(c) } }
       end
     end
   end
