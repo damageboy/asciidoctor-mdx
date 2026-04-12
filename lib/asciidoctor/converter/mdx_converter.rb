@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'json'
 require 'yaml'
 require 'pathname'
 
@@ -7,15 +8,18 @@ class MdxConverter < Asciidoctor::Converter::Base
   register_for 'mdx'
 
   def convert_document(doc)
-    @xref_map = {}        # anchor_id (String) -> chapter_slug (String)
+    @xref_map      = {}   # anchor_id (String) -> chapter_slug (String)
     @chapter_slugs = {}   # section object_id -> slug (String)
     @current_chapter = nil
+    @sidebar_dir   = doc.attr('mdx-sidebar-dir', nil, false)
+    @sidebar_tree  = []   # array of sidebar node hashes, one per top-level section
 
-    # Pass 1: collect all anchor IDs and map them to their chapter slug
+    # Pass 1: collect all anchor IDs and build sidebar tree
     doc.sections.each do |section|
       slug = section_slug(section)
       @chapter_slugs[section.object_id] = slug
       collect_anchors(section, slug)
+      @sidebar_tree << collect_sidebar_node(section, slug) if @sidebar_dir
     end
 
     # Replay attribute entries from the preamble and other pre-section blocks.
@@ -40,6 +44,12 @@ class MdxConverter < Asciidoctor::Converter::Base
       File.write(File.join(outdir, "#{slug}.mdx"), content)
     end
 
+    # Write sidebar.json when mdx-sidebar-dir is set
+    if @sidebar_dir
+      sidebar_data = @sidebar_tree.map { |node| build_sidebar_item(node) }
+      File.write(File.join(outdir, 'sidebar.json'), JSON.pretty_generate(sidebar_data))
+    end
+
     '' # Asciidoctor expects a string return; multi-file output is a side effect
   end
 
@@ -61,6 +71,41 @@ class MdxConverter < Asciidoctor::Converter::Base
     @xref_map[node.id] = chapter_slug if node.id && !node.id.empty?
     return unless node.respond_to?(:blocks)
     node.blocks.each { |b| collect_anchors(b, chapter_slug) }
+  end
+
+  def collect_sidebar_node(section, chapter_slug)
+    return nil if section.level > 3
+    children = section.sections.filter_map { |sub| collect_sidebar_node(sub, chapter_slug) }
+    { title: section.title, anchor_id: section.id, chapter_slug: chapter_slug,
+      level: section.level, children: children }
+  end
+
+  def build_sidebar_item(node)
+    title = node[:title]
+    slug  = node[:chapter_slug]
+    id    = "#{@sidebar_dir}/#{slug}"
+
+    if node[:level] == 1
+      if node[:children].empty?
+        { 'type' => 'doc', 'id' => id, 'label' => title }
+      else
+        { 'type' => 'category', 'label' => title,
+          'link' => { 'type' => 'doc', 'id' => id },
+          'collapsible' => true, 'collapsed' => false,
+          'items' => node[:children].map { |c| build_sidebar_item(c) } }
+      end
+    else
+      anchor = node[:anchor_id]
+      href   = (anchor && !anchor.empty?) ? "#{@sidebar_dir}/#{slug}##{anchor}" : "#{@sidebar_dir}/#{slug}"
+      if node[:children].empty?
+        { 'type' => 'link', 'label' => title, 'href' => href }
+      else
+        { 'type' => 'category', 'label' => title,
+          'collapsible' => true, 'collapsed' => false,
+          'items' => [{ 'type' => 'link', 'label' => title, 'href' => href }] +
+                     node[:children].map { |c| build_sidebar_item(c) } }
+      end
+    end
   end
 
   def render_chapter(section, position)
