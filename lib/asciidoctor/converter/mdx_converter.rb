@@ -9,6 +9,7 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   def convert_document(doc)
     @xref_map      = {}   # anchor_id (String) -> chapter_slug (String)
+    @xref_labels   = {}   # anchor_id (String) -> human-readable link text (String)
     @chapter_slugs = {}   # section object_id -> slug (String)
     @current_chapter = nil
     @sidebar_dir   = doc.attr('mdx-sidebar-dir', nil, false)
@@ -68,9 +69,39 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   def collect_anchors(node, chapter_slug)
     return unless node.respond_to?(:id)
-    @xref_map[node.id] = chapter_slug if node.id && !node.id.empty?
+    if node.id && !node.id.empty?
+      @xref_map[node.id] = chapter_slug
+      label = compute_xref_label(node)
+      @xref_labels[node.id] = label if label
+    end
     return unless node.respond_to?(:blocks)
     node.blocks.each { |b| collect_anchors(b, chapter_slug) }
+  end
+
+  # Returns a human-readable cross-reference label for a node, mirroring
+  # Asciidoctor's HTML5 xref resolution:
+  #   - Explicit reftext ([[anchor, My Label]]) → "My Label"
+  #   - Numbered section                        → "Section N.M.P"
+  #   - Captioned block (table, figure)         → "Table N" / "Figure N"
+  #   - Titled block                            → raw title
+  def compute_xref_label(node)
+    # 1. Explicit reftext set via [[anchor, reftext]] or [reftext="..."]
+    if node.respond_to?(:attributes) && (reftext = node.attributes['reftext'].to_s) && !reftext.empty?
+      return reftext
+    end
+    # 2. Numbered section → "Section N.M.P"
+    if node.respond_to?(:context) && node.context == :section
+      if node.respond_to?(:numbered) && node.numbered && node.respond_to?(:sectnum)
+        return "Section #{node.sectnum.to_s.chomp('.')}"
+      end
+      return node.title if node.respond_to?(:title) && node.title
+    end
+    # 3. Captioned block (table/figure/example): caption is e.g. "Table 18. "
+    if node.respond_to?(:caption) && (cap = node.caption.to_s.strip) && !cap.empty?
+      return cap.chomp('.')
+    end
+    # 4. Any other titled block
+    node.respond_to?(:title) && node.title && !node.title.to_s.empty? ? node.title : nil
   end
 
   def collect_sidebar_node(section, chapter_slug)
@@ -128,6 +159,11 @@ class MdxConverter < Asciidoctor::Converter::Base
     ]
     edit_url = build_custom_edit_url(section, doc)
     frontmatter_lines << "custom_edit_url: #{edit_url}" if edit_url
+    last_update_date = build_last_update_date(section, doc)
+    if last_update_date
+      frontmatter_lines << "last_update:"
+      frontmatter_lines << "  date: #{last_update_date}"
+    end
     frontmatter_lines += ['---', '']
     frontmatter = frontmatter_lines.join("\n")
     "#{frontmatter}\n#{section.content}\n"
@@ -157,6 +193,32 @@ class MdxConverter < Asciidoctor::Converter::Base
                        .to_s
     "#{base_url.chomp('/')}/#{rel_path}"
   rescue ArgumentError
+    nil
+  end
+
+  # Returns the last git commit date (YYYY-MM-DD) for the source .adoc file
+  # of the given section, or nil if unavailable.
+  #
+  # Requires +github-local-root+ (or falls back to parent of docdir) so that
+  # git is invoked from within the correct repository root.
+  def build_last_update_date(section, doc)
+    source_file = section.source_location&.file
+    return nil unless source_file
+
+    local_root = doc.attr('github-local-root', nil, false) ||
+                 File.dirname(doc.attr('docdir', '.'))
+
+    source_path = File.expand_path(source_file)
+    root_path   = File.expand_path(local_root)
+
+    # Array form passes args directly to execve — no shell, no injection risk.
+    date = IO.popen( # nosemgrep
+      ['git', '-C', root_path, 'log', '--format=%as', '-1', '--', source_path],
+      err: File::NULL
+    ) { |io| io.read.strip }
+
+    date.empty? ? nil : date
+  rescue StandardError
     nil
   end
 
@@ -367,23 +429,96 @@ class MdxConverter < Asciidoctor::Converter::Base
   end
 
   def convert_table(node)
-    return convert_table_gridtable(node) if table_is_complex?(node)
+    all_cells = node.rows.head.flatten + node.rows.body.flatten + node.rows.foot.flatten
+    table_md = if table_is_complex?(node)
+      convert_table_gridtable(node)
+    elsif all_cells.any? && all_cells.all? { |cell| cell.style == :asciidoc }
+      # Outer layout table whose cells are asciidoc sub-documents (e.g. the
+      # side-by-side RVC format tables).  Try to merge all inner tables into
+      # one grid table; fall back to stacked sequential output if rows differ.
+      convert_asciidoc_layout_table(all_cells)
+    else
+      rows = []
+      if node.rows.head.any?
+        header_cells = node.rows.head.first.map { |cell| table_cell_text(cell).gsub('|', '\|') }
+        rows << "| #{header_cells.join(' | ')} |"
+        rows << "| #{header_cells.map { '---' }.join(' | ')} |"
+      end
+      node.rows.body.each do |row|
+        cells = row.map { |cell| table_cell_text(cell).gsub('|', '\\|') }
+        rows << "| #{cells.join(' | ')} |"
+      end
+      node.rows.foot.each do |row|
+        cells = row.map { |cell| table_cell_text(cell).gsub('|', '\\|') }
+        rows << "| #{cells.join(' | ')} |"
+      end
+      "#{rows.join("\n")}\n\n"
+    end
+    render_captioned_block(node, table_md, caption_first: true)
+  end
 
-    rows = []
-    if node.rows.head.any?
-      header_cells = node.rows.head.first.map { |cell| table_cell_text(cell).gsub('|', '\|') }
-      rows << "| #{header_cells.join(' | ')} |"
-      rows << "| #{header_cells.map { '---' }.join(' | ')} |"
+  # Renders a layout table whose every cell is an asciidoc sub-document.
+  # When each cell holds exactly one inner table and all inner tables share
+  # the same row count, they are merged into one grid table (columns
+  # concatenated left-to-right).  Otherwise falls back to stacking them.
+  def convert_asciidoc_layout_table(outer_cells)
+    inner_tables = outer_cells.filter_map { |cell|
+      next unless cell.inner_document
+      tables = cell.inner_document.blocks.select { |b| b.context == :table }
+      tables.size == 1 ? tables.first : nil
+    }
+
+    if inner_tables.size == outer_cells.size
+      nrows_each = inner_tables.map { |t| t.rows.head.size + t.rows.body.size + t.rows.foot.size }
+      return merge_tables_horizontally(inner_tables) if nrows_each.uniq.size == 1 && nrows_each.first > 0
     end
-    node.rows.body.each do |row|
-      cells = row.map { |cell| table_cell_text(cell).gsub('|', '\\|') }
-      rows << "| #{cells.join(' | ')} |"
+
+    # Fallback: render each cell's content as sequential Markdown blocks
+    outer_cells.filter_map { |cell|
+      next unless cell.inner_document
+      cell.inner_document.blocks.map { |b| convert(b) }.join
+    }.join("\n")
+  end
+
+  # Merges multiple Asciidoctor table nodes into a single grid table by
+  # concatenating their columns.  All tables must have the same row count.
+  def merge_tables_horizontally(inner_tables)
+    metas = inner_tables.map { |t|
+      ncols = t.columns.size
+      grid, nrows, nhead = build_grid(t)
+      widths = compute_col_widths(grid, ncols, nrows)
+      { grid: grid, nrows: nrows, nhead: nhead, ncols: ncols, widths: widths }
+    }
+
+    nrows      = metas.first[:nrows]
+    nhead      = metas.map { |m| m[:nhead] }.max
+    all_widths = metas.flat_map { |m| m[:widths] }
+    total_cols = metas.sum { |m| m[:ncols] }
+
+    # Build merged grid: copy each sub-grid, shifting origin_col by column offset
+    merged = Array.new(nrows) { Array.new(total_cols) }
+    col_offset = 0
+    metas.each do |meta|
+      nrows.times do |r|
+        meta[:ncols].times do |c|
+          slot = meta[:grid][r][c]
+          next unless slot
+          merged[r][col_offset + c] = {
+            cell: slot[:cell],
+            origin_row: slot[:origin_row],
+            origin_col: slot[:origin_col] + col_offset
+          }
+        end
+      end
+      col_offset += meta[:ncols]
     end
-    node.rows.foot.each do |row|
-      cells = row.map { |cell| table_cell_text(cell).gsub('|', '\\|') }
-      rows << "| #{cells.join(' | ')} |"
+
+    lines = [render_grid_separator(all_widths, merged, -1, 0, nrows, false)]
+    nrows.times do |r|
+      lines << render_grid_content_row(all_widths, merged, r, total_cols)
+      lines << render_grid_separator(all_widths, merged, r, r + 1, nrows, nhead > 0 && r == nhead - 1)
     end
-    "#{rows.join("\n")}\n\n"
+    lines.join("\n") + "\n\n"
   end
 
   # Convert a table cell to a plain string suitable for a GFM table cell.
@@ -405,7 +540,75 @@ class MdxConverter < Asciidoctor::Converter::Base
   def convert_image(node)
     alt  = escape_mdx(node.attr('alt', node.attr('target'), false).to_s)
     path = build_mdx_image_path(node)
-    "![#{alt}](#{path})\n\n"
+    render_captioned_block(node, "![#{alt}](#{path})\n\n", caption_first: false)
+  end
+
+  # Attaches a visible caption and linkable anchor to a table or image block.
+  #
+  # Tables (caption_first: true):
+  #   Emits a <p> caption paragraph (with the anchor id) directly above the
+  #   table, leaving the table itself at the top level of the MDX document.
+  #   A <figure> wrapper is intentionally avoided for tables: grid table rows
+  #   begin with "+", which CommonMark inside an HTML flow block interprets as
+  #   a list marker, breaking the @adobe/remark-gridtables plugin.
+  #
+  # Images (caption_first: false):
+  #   Emits a semantic <figure> wrapper with a <figcaption> below. Images
+  #   don't trigger the "+" list-marker conflict.
+  #
+  # If the node has neither an id nor a title the content is returned as-is.
+  def render_captioned_block(node, content, caption_first:)
+    has_id    = node.id && !node.id.empty?
+    has_title = node.respond_to?(:title) && !node.title.to_s.empty?
+    return content unless has_id || has_title
+
+    id_attr    = has_id ? " id=\"#{sanitize_anchor_id(node.id)}\"" : ''
+    figcaption = build_figcaption(node)
+
+    if caption_first
+      # Table: standalone caption <p> above; table stays at document top level
+      if figcaption
+        "<p#{id_attr} className=\"riscv-caption\">#{figcaption}</p>\n\n#{content}"
+      else
+        "<span#{id_attr}></span>\n\n#{content}"
+      end
+    else
+      # Image: semantic <figure> wrapper with caption below
+      if figcaption
+        "<figure#{id_attr}>\n\n#{content}\n<figcaption>#{figcaption}</figcaption>\n</figure>\n\n"
+      else
+        "<figure#{id_attr}>\n\n#{content}\n</figure>\n\n"
+      end
+    end
+  end
+
+  # Returns the inner HTML of a <figcaption> for a node, or nil.
+  # Caption prefix ("Table 18.") is bolded; the title follows in normal weight.
+  def build_figcaption(node)
+    title   = node.respond_to?(:title)   ? node.title.to_s.strip   : ''
+    raw_cap = node.respond_to?(:caption) ? node.caption.to_s.strip : ''
+    # Strip trailing ". " or "." so we can re-add a clean period
+    cap = raw_cap.chomp('.').rstrip
+    return nil if title.empty? && cap.empty?
+
+    if !cap.empty? && !title.empty?
+      "<strong>#{escape_jsx(cap)}.</strong> #{escape_jsx(title)}"
+    elsif !cap.empty?
+      "<strong>#{escape_jsx(cap)}.</strong>"
+    else
+      escape_jsx(title)
+    end
+  end
+
+  # Escapes text for use inside JSX/HTML element content.
+  # Uses HTML entities — backslash escapes are not interpreted in JSX text nodes.
+  def escape_jsx(str)
+    str.to_s
+       .gsub('&', '&amp;')
+       .gsub('<', '&lt;')
+       .gsub('>', '&gt;')
+       .gsub('{', '&#123;')
+       .gsub('}', '&#125;')
   end
 
   # Returns the image URL to embed in MDX output.
@@ -611,7 +814,7 @@ class MdxConverter < Asciidoctor::Converter::Base
 
   def resolve_xref(node)
     target  = node.attr('refid') || node.target.to_s.sub(/^#/, '')
-    text    = presence(node.text) || target
+    text    = presence(node.text) || @xref_labels&.fetch(target, nil) || target
     chapter = @xref_map&.fetch(target, nil)
     anchor  = sanitize_anchor_id(target)
     if chapter.nil? || chapter == @current_chapter
