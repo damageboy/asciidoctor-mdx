@@ -44,6 +44,40 @@ RSpec.describe MdxConverter do
       result = convert_to_mdx(src)
       expect(result.keys).to include('hello-world')
     end
+
+    it 'preserves uppercase letters by lowercasing explicit section ids before filename sanitization' do
+      src = <<~ADOC
+        = Doc
+
+        [#CSRs]
+        == Control and Status Registers
+
+        CSR content.
+
+        [#IPIs]
+        == Interprocessor Interrupts
+
+        IPI content.
+
+        [#MSLevel]
+        == Machine and Supervisor Levels
+
+        MS-level content.
+
+        [#VSLevel]
+        == Virtual Supervisor Level
+
+        VS-level content.
+      ADOC
+
+      result = convert_to_mdx(src)
+
+      expect(result.keys).to include('csrs', 'ipis', 'mslevel', 'vslevel')
+      expect(result['csrs']).to include('id: csrs')
+      expect(result['ipis']).to include('id: ipis')
+      expect(result['mslevel']).to include('id: mslevel')
+      expect(result['vslevel']).to include('id: vslevel')
+    end
   end
 
   describe 'section headings' do

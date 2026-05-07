@@ -11,6 +11,7 @@ class MdxConverter < Asciidoctor::Converter::Base
     @xref_map      = {}   # anchor_id (String) -> chapter_slug (String)
     @xref_labels   = {}   # anchor_id (String) -> human-readable link text (String)
     @chapter_slugs = {}   # section object_id -> slug (String)
+    @chapter_xrefs = {}   # top-level section anchor_id (String) -> chapter_slug (String)
     @current_chapter = nil
     @sidebar_dir   = doc.attr('mdx-sidebar-dir', nil, false)
     @sidebar_tree  = []   # array of sidebar node hashes, one per top-level section
@@ -19,6 +20,7 @@ class MdxConverter < Asciidoctor::Converter::Base
     doc.sections.each do |section|
       slug = section_slug(section)
       @chapter_slugs[section.object_id] = slug
+      @chapter_xrefs[section.id] = slug if section.id && !section.id.empty?
       collect_anchors(section, slug)
       @sidebar_tree << collect_sidebar_node(section, slug) if @sidebar_dir
     end
@@ -59,7 +61,7 @@ class MdxConverter < Asciidoctor::Converter::Base
   def section_slug(section)
     explicit_id = section.attributes['id']
     base = if explicit_id && !explicit_id.empty?
-      explicit_id
+      explicit_id.downcase
     else
       section.title.downcase.gsub(/[^a-z0-9]+/, '-').gsub(/^-+|-+$/, '')
     end
@@ -819,7 +821,7 @@ class MdxConverter < Asciidoctor::Converter::Base
     anchor  = sanitize_anchor_id(target)
     if chapter.nil? || chapter == @current_chapter
       "[#{escape_mdx(text)}](##{anchor})"
-    elsif chapter == target
+    elsif @chapter_xrefs&.fetch(target, nil) == chapter
       # target IS the chapter (top-level section); no anchor fragment needed
       "[#{escape_mdx(text)}](./#{chapter})"
     else
